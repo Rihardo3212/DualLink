@@ -1,0 +1,50 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to attach DualLink.exe to a release
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Run tests (on real Windows networking)
+        run: python -m pytest -v
+
+      - name: Check the app imports on Windows
+        run: python -c "import webview, pystray, duallink.app; print('imports ok')"
+
+      - name: Build DualLink.exe
+        run: |
+          python tools/make_icon.py
+          python -m PyInstaller --noconfirm --onefile --windowed --name DualLink --icon build/icon.ico `
+            --add-data "duallink/ui;duallink/ui" `
+            --hidden-import pystray._win32 --hidden-import webview.platforms.winforms --hidden-import webview.platforms.edgechromium `
+            main.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DualLink
+          path: dist/DualLink.exe
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/DualLink.exe
+          generate_release_notes: true

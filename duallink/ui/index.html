@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DualLink</title>
+<style>
+  :root {
+    --bg: #0e1015; --panel: #161921; --panel-2: #1d212b; --line: #272c38;
+    --text: #e9ecf2; --muted: #8b93a5; --faint: #5d6476;
+    --eth: #4d8dff; --hot: #ff9b3d; --on: #2fd67b; --warn: #ffc84d; --bad: #ff5d6c;
+    --shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 8px 24px rgba(0,0,0,.25);
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f3f5f9; --panel: #ffffff; --panel-2: #f6f7fa; --line: #e3e6ee;
+      --text: #161a23; --muted: #5e6678; --faint: #9aa1b0;
+      --shadow: 0 1px 2px rgba(20,30,60,.06), 0 8px 24px rgba(20,30,60,.06);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 14px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased; user-select: none; overflow: hidden;
+  }
+  button { font: inherit; color: inherit; }
+  .app { height: 100%; display: flex; flex-direction: column; padding: 18px 22px 16px; gap: 14px; overflow: auto; }
+
+  /* header */
+  header { display: flex; align-items: center; gap: 12px; }
+  header .title { font-weight: 650; font-size: 17px; letter-spacing: .2px; }
+  header .sub { color: var(--muted); font-size: 12.5px; }
+  header .spacer { flex: 1; }
+  .icon-btn {
+    width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--panel); display: grid; place-items: center; cursor: pointer; color: var(--muted);
+  }
+  .icon-btn:hover { color: var(--text); border-color: var(--faint); }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
+
+  /* hero */
+  .hero { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 22px; padding: 20px 24px; }
+  .power {
+    width: 92px; height: 92px; border-radius: 50%; cursor: pointer; position: relative;
+    border: 2px solid var(--line); background: var(--panel-2); color: var(--faint);
+    display: grid; place-items: center; transition: all .25s ease;
+  }
+  .power:hover { border-color: var(--faint); color: var(--muted); }
+  .power.on { border-color: var(--on); color: var(--on); background: color-mix(in srgb, var(--on) 10%, var(--panel-2));
+              box-shadow: 0 0 0 6px color-mix(in srgb, var(--on) 10%, transparent); }
+  .power.busy { opacity: .6; pointer-events: none; }
+  .power svg { width: 38px; height: 38px; }
+  .state-label { font-size: 13px; color: var(--muted); margin-bottom: 2px; }
+  .state-label b { color: var(--text); font-weight: 600; }
+  .speed-big { font-size: 44px; font-weight: 650; letter-spacing: -1px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .speed-big small { font-size: 18px; font-weight: 500; color: var(--muted); letter-spacing: 0; margin-left: 4px; }
+  .split { display: flex; gap: 14px; margin-top: 6px; color: var(--muted); font-size: 12.5px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 999px;
+          background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+  .chip.good { color: var(--on); border-color: color-mix(in srgb, var(--on) 35%, var(--line)); }
+  .chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+
+  /* chart */
+  .chart-card { padding: 14px 18px 10px; }
+  .chart-head { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 12.5px; margin-bottom: 6px; }
+  .legend span { margin-left: 14px; }
+  canvas { width: 100%; height: 150px; display: block; }
+
+  /* link cards */
+  .links { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .link { padding: 16px 18px; position: relative; overflow: hidden; }
+  .link::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--c); }
+  .link-head { display: flex; align-items: center; gap: 10px; }
+  .link-icon { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center;
+               background: color-mix(in srgb, var(--c) 14%, transparent); color: var(--c); }
+  .link-name { font-weight: 600; }
+  .link-ip { color: var(--faint); font-size: 12px; }
+  .link-speed { margin-left: auto; text-align: right; font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .link-speed small { display: block; font-size: 11.5px; font-weight: 500; color: var(--muted); }
+  .rows { margin-top: 14px; display: grid; gap: 9px; }
+  .row { display: flex; justify-content: space-between; color: var(--muted); font-size: 12.5px; }
+  .row b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .bar { height: 6px; border-radius: 99px; background: var(--panel-2); overflow: hidden; margin-top: 5px; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--c); border-radius: 99px; transition: width .6s ease; }
+  .bar.limit i { background: var(--warn); }
+  .tag { font-size: 11px; padding: 2px 7px; border-radius: 6px; background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); margin-left: 6px; }
+
+  /* qbt banner */
+  .banner { padding: 14px 18px; display: flex; gap: 14px; align-items: flex-start; }
+  .banner .b-icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; flex: none;
+                    background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+  .banner h3 { margin: 2px 0 4px; font-size: 14px; }
+  .banner p { margin: 0; color: var(--muted); font-size: 12.5px; }
+  .banner ol { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
+  .banner ol b { color: var(--text); font-weight: 600; }
+  .banner .actions { margin-left: auto; display: flex; gap: 8px; flex: none; }
+  .btn { border: 1px solid var(--line); background: var(--panel-2); border-radius: 9px; padding: 7px 13px; cursor: pointer; font-size: 13px; }
+  .btn:hover { border-color: var(--faint); }
+  .btn.primary { background: var(--eth); border-color: var(--eth); color: #fff; }
+  .link-btn { background: none; border: 0; padding: 0; color: var(--eth); cursor: pointer; font-size: 12.5px; }
+  .hidden { display: none !important; }
+
+  footer { color: var(--faint); font-size: 12px; display: flex; justify-content: space-between; }
+
+  /* settings drawer */
+  .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.45); opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .scrim.open { opacity: 1; pointer-events: auto; }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 92vw); background: var(--panel);
+            border-left: 1px solid var(--line); transform: translateX(100%); transition: transform .25s ease;
+            display: flex; flex-direction: column; }
+  .drawer.open { transform: none; }
+  .drawer-head { display: flex; align-items: center; padding: 18px 20px 10px; }
+  .drawer-head h2 { margin: 0; font-size: 17px; flex: 1; }
+  .drawer-body { overflow: auto; padding: 0 20px 24px; }
+  .section { border-top: 1px solid var(--line); padding: 16px 0 6px; }
+  .section:first-child { border-top: 0; }
+  .section h4 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); font-weight: 600; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 5px; }
+  .field .hint { font-size: 11.5px; color: var(--faint); margin-top: 4px; }
+  select, input[type=text], input[type=password], input[type=number] {
+    width: 100%; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2);
+    color: var(--text); font: inherit; outline: none; user-select: text;
+  }
+  select:focus, input:focus { border-color: var(--eth); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .toggle { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 8px 0; cursor: pointer; }
+  .toggle .t-text { font-size: 13.5px; }
+  .toggle .t-text small { display: block; color: var(--faint); font-size: 11.5px; }
+  .switch { position: relative; width: 38px; height: 22px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch span { position: absolute; inset: 0; border-radius: 99px; background: var(--line); transition: .2s; }
+  .switch span::after { content: ""; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; border-radius: 50%; background: #fff; transition: .2s; }
+  .switch input:checked + span { background: var(--eth); }
+  .switch input:checked + span::after { transform: translateX(16px); }
+  .note { font-size: 12px; color: var(--warn); margin: 4px 0 8px; }
+  .result { font-size: 12.5px; margin-top: 8px; }
+  .result.ok { color: var(--on); } .result.err { color: var(--bad); }
+
+  .toast { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 20px); opacity: 0; transition: .25s;
+           background: var(--panel-2); border: 1px solid var(--line); padding: 10px 16px; border-radius: 11px;
+           box-shadow: var(--shadow); max-width: 80%; font-size: 13px; pointer-events: none; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.err { border-color: var(--bad); }
+
+  @media (max-width: 720px) { .links { grid-template-columns: 1fr; } .hero { grid-template-columns: auto 1fr; } .hero .chip { grid-column: 1 / -1; justify-self: start; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <svg width="34" height="34" viewBox="0 0 64 64" aria-hidden="true">
+      <rect width="64" height="64" rx="14" fill="#141821"/>
+      <path d="M19 11v14l13 13" stroke="#4d8dff" stroke-width="5.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M45 11v14L32 38" stroke="#ff9b3d" stroke-width="5.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M32 37v9" stroke="#ebeef5" stroke-width="5.5" stroke-linecap="round"/>
+      <path d="M21 43h22L32 55z" fill="#ebeef5"/>
+    </svg>
+    <div>
+      <div class="title">DualLink</div>
+      <div class="sub">Ethernet + phone hotspot for qBittorrent</div>
+    </div>
+    <div class="spacer"></div>
+    <button class="icon-btn" id="openSettings" title="Settings" aria-label="Settings">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </header>
+
+  <section class="card hero">
+    <button class="power" id="power" title="Turn DualLink on/off" aria-label="Turn DualLink on or off">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v8"/><path d="M6.4 6.6a8 8 0 1 0 11.2 0"/></svg>
+    </button>
+    <div>
+      <div class="state-label" id="stateLabel"><b>Off</b> · press the button to combine your connections</div>
+      <div class="speed-big" id="combined">0<small>B/s</small></div>
+      <div class="split">
+        <span><i class="dot" style="background:var(--eth)"></i>Ethernet <b id="ethMini">0 B/s</b></span>
+        <span><i class="dot" style="background:var(--hot)"></i>Hotspot <b id="hotMini">0 B/s</b></span>
+      </div>
+    </div>
+    <div class="chip" id="qbtChip">qBittorrent: waiting</div>
+  </section>
+
+  <section class="card banner hidden" id="qbtBanner">
+    <div class="b-icon">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 8v5"/><path d="M12 16.5v.5"/><circle cx="12" cy="12" r="9.5"/></svg>
+    </div>
+    <div style="flex:1">
+      <h3 id="bTitle">Let DualLink set up qBittorrent for you</h3>
+      <p id="bText">DualLink is running, but it can't reach qBittorrent yet. One-time setup:</p>
+      <ol id="bSteps">
+        <li>In qBittorrent open <b>Tools › Options › Web UI</b></li>
+        <li>Tick <b>Web User Interface (Remote control)</b> - keep port <b>8080</b></li>
+        <li>Tick <b>Bypass authentication for clients on localhost</b>, click <b>OK</b></li>
+      </ol>
+      <p style="margin-top:8px"><button class="link-btn" id="showManual">Prefer to set qBittorrent up by hand?</button></p>
+      <ol id="manualSteps" class="hidden">
+        <li><b>Tools › Options › Connection</b>: Peer connection protocol <b>TCP</b></li>
+        <li>Proxy <b>SOCKS5</b>, host <b>127.0.0.1</b>, port <b id="manualPort">1080</b></li>
+        <li>Tick <b>Use proxy for BitTorrent purposes</b> and <b>Use proxy for peer connections</b></li>
+        <li>Click <b>Apply</b>, then pause and resume your torrents</li>
+      </ol>
+    </div>
+    <div class="actions"><button class="btn primary" id="retryQbt">Try again</button></div>
+  </section>
+
+  <section class="card chart-card">
+    <div class="chart-head">
+      <span>Download speed · last 90 seconds</span>
+      <span class="legend"><span><i class="dot" style="background:var(--eth)"></i>Ethernet</span><span><i class="dot" style="background:var(--hot)"></i>Hotspot</span></span>
+    </div>
+    <canvas id="chart"></canvas>
+  </section>
+
+  <section class="links">
+    <div class="card link" style="--c:var(--eth)" id="linkEth">
+      <div class="link-head">
+        <div class="link-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></div>
+        <div><div class="link-name">Ethernet</div><div class="link-ip" data-k="ip">not selected</div></div>
+        <div class="link-speed"><span data-k="speed">0 B/s</span><small>download</small></div>
+      </div>
+      <div class="rows">
+        <div><div class="row"><span>Share of new connections</span><b data-k="share">-</b></div><div class="bar"><i data-k="shareBar"></i></div></div>
+        <div class="row"><span>Open connections</span><b data-k="conns">0</b></div>
+        <div class="row"><span>Downloaded this session</span><b data-k="down">0 B</b></div>
+      </div>
+    </div>
+    <div class="card link" style="--c:var(--hot)" id="linkHot">
+      <div class="link-head">
+        <div class="link-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M11 18.5h2"/></svg></div>
+        <div><div class="link-name">Phone hotspot <span class="tag hidden" data-k="limitTag">limit reached</span></div><div class="link-ip" data-k="ip">not selected</div></div>
+        <div class="link-speed"><span data-k="speed">0 B/s</span><small>download</small></div>
+      </div>
+      <div class="rows">
+        <div><div class="row"><span>Share of new connections</span><b data-k="share">-</b></div><div class="bar"><i data-k="shareBar"></i></div></div>
+        <div class="row"><span>Open connections</span><b data-k="conns">0</b></div>
+        <div><div class="row"><span>Mobile data used this session</span><b data-k="used">0 B</b></div><div class="bar limit" data-k="limitWrap"><i data-k="limitBar"></i></div></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span id="footLeft">Automatic balancing on</span>
+    <span id="footRight">Proxy 127.0.0.1:1080</span>
+  </footer>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Settings">
+  <div class="drawer-head">
+    <h2>Settings</h2>
+    <button class="icon-btn" id="closeSettings" aria-label="Close settings">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="drawer-body">
+    <div class="note hidden" id="restartNote">Changes to connections or port apply the next time you turn DualLink on.</div>
+
+    <div class="section">
+      <h4>Connections</h4>
+      <div class="field"><label for="s_eth">Ethernet (home internet)</label><select id="s_eth"></select></div>
+      <div class="field"><label for="s_hot">Phone hotspot</label><select id="s_hot"></select>
+        <div class="hint">Plug in or connect your phone first, then <button class="link-btn" id="refreshAdapters">refresh the list</button>.</div></div>
+    </div>
+
+    <div class="section">
+      <h4>Balancing</h4>
+      <label class="toggle"><span class="t-text">Favour the faster connection automatically<small>Measures both links and gives the faster one more peers</small></span>
+        <span class="switch"><input type="checkbox" id="s_auto"><span></span></span></label>
+      <label class="toggle" id="recycleRow"><span class="t-text">Move idle peers to the faster connection<small>Reconnects peers that have been idle for 90 s</small></span>
+        <span class="switch"><input type="checkbox" id="s_recycle"><span></span></span></label>
+      <div class="two hidden" id="manualShares">
+        <div class="field"><label for="s_share_eth">Ethernet share</label><input type="number" id="s_share_eth" min="0.1" step="0.5"></div>
+        <div class="field"><label for="s_share_hot">Hotspot share</label><input type="number" id="s_share_hot" min="0.1" step="0.5"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h4>Mobile data</h4>
+      <div class="field"><label for="s_quota">Stop using the hotspot after (MB)</label><input type="number" id="s_quota" min="0" step="100">
+        <div class="hint">0 = no limit. Counted from when you turn DualLink on.</div></div>
+    </div>
+
+    <div class="section">
+      <h4>qBittorrent</h4>
+      <label class="toggle"><span class="t-text">Set up qBittorrent automatically<small>Applies the proxy when on, restores your settings when off</small></span>
+        <span class="switch"><input type="checkbox" id="s_qbt_auto"><span></span></span></label>
+      <div id="qbtFields">
+        <div class="field"><label for="s_qbt_url">Web UI address</label><input type="text" id="s_qbt_url" spellcheck="false"></div>
+        <div class="two">
+          <div class="field"><label for="s_qbt_user">Username (optional)</label><input type="text" id="s_qbt_user" spellcheck="false"></div>
+          <div class="field"><label for="s_qbt_pass">Password</label><input type="password" id="s_qbt_pass"></div>
+        </div>
+        <label class="toggle"><span class="t-text">Reconnect downloading torrents<small>So existing peers switch over immediately</small></span>
+          <span class="switch"><input type="checkbox" id="s_reconnect"><span></span></span></label>
+        <button class="btn" id="testQbt">Test connection</button>
+        <div class="result" id="testResult"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h4>App</h4>
+      <label class="toggle"><span class="t-text">Keep running in the system tray when closed</span>
+        <span class="switch"><input type="checkbox" id="s_tray"><span></span></span></label>
+      <label class="toggle"><span class="t-text">Start with Windows</span>
+        <span class="switch"><input type="checkbox" id="s_autostart"><span></span></span></label>
+      <div class="field"><label for="s_port">Proxy port</label><input type="number" id="s_port" min="1024" max="65535"></div>
+    </div>
+  </div>
+</aside>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let api = null, settings = {}, running = false, saveTimer = null;
+
+// ---------- formatting ----------
+function fmtSpeed(b) {
+  const u = ["B/s", "KiB/s", "MiB/s", "GiB/s"]; let i = 0;
+  while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+  return { n: i === 0 ? Math.round(b).toString() : b.toFixed(b < 10 ? 2 : 1), u: u[i] };
+}
+const speedStr = (b) => { const s = fmtSpeed(b); return `${s.n} ${s.u}`; };
+function axisStr(b) {   // compact labels for the graph axis
+  if (b <= 0) return "0";
+  const u = ["B/s", "KiB/s", "MiB/s", "GiB/s"]; let i = 0;
+  while (b >= 1000 && i < u.length - 1) { b /= 1024; i++; }
+  return `${+b.toFixed(b < 10 ? 1 : 0)} ${u[i]}`;
+}
+function sizeStr(b) {
+  const u = ["B", "KiB", "MiB", "GiB", "TiB"]; let i = 0;
+  while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+  return i === 0 ? `${Math.round(b)} B` : `${b.toFixed(1)} ${u[i]}`;
+}
+
+function toast(msg, err = false) {
+  const t = $("toast"); t.textContent = msg; t.className = "toast show" + (err ? " err" : "");
+  clearTimeout(t._h); t._h = setTimeout(() => (t.className = "toast"), err ? 6000 : 3000);
+}
+
+// ---------- chart ----------
+const chart = $("chart");
+function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function niceMax(v) {
+  if (v <= 0) return 1024 * 1024;
+  const p = Math.pow(1024, Math.floor(Math.log(v) / Math.log(1024)));
+  const steps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+  for (const s of steps) if (s * p >= v * 1.1) return s >= 1000 ? 1024 * p : s * p;
+  return v * 1.2;
+}
+function drawChart(eth, hot) {
+  const dpr = window.devicePixelRatio || 1, w = chart.clientWidth, h = chart.clientHeight;
+  if (chart.width !== w * dpr || chart.height !== h * dpr) { chart.width = w * dpr; chart.height = h * dpr; }
+  const g = chart.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  const n = eth.length, top = 8, bottom = h - 18, left = 0, right = w - 64;
+  const total = eth.map((v, i) => v + hot[i]);
+  const max = niceMax(Math.max(...total, 0));
+  const x = (i) => left + (right - left) * (i / (n - 1));
+  const y = (v) => bottom - (bottom - top) * (v / max);
+  // grid
+  g.strokeStyle = css("--line"); g.lineWidth = 1; g.fillStyle = css("--faint"); g.font = "11px Segoe UI, sans-serif";
+  for (let k = 0; k <= 2; k++) {
+    const v = (max * k) / 2, yy = Math.round(y(v)) + 0.5;
+    g.beginPath(); g.moveTo(left, yy); g.lineTo(right, yy); g.stroke();
+    g.fillText(axisStr(v), right + 8, yy + 4);
+  }
+  g.fillText("90s", left, h - 3); g.fillText("now", right - 22, h - 3);
+  const area = (lower, upper, color) => {
+    g.beginPath(); g.moveTo(x(0), y(upper[0]));
+    for (let i = 1; i < n; i++) g.lineTo(x(i), y(upper[i]));
+    for (let i = n - 1; i >= 0; i--) g.lineTo(x(i), y(lower[i]));
+    g.closePath();
+    const grad = g.createLinearGradient(0, top, 0, bottom);
+    grad.addColorStop(0, color + "66"); grad.addColorStop(1, color + "14");
+    g.fillStyle = grad; g.fill();
+    g.beginPath(); g.moveTo(x(0), y(upper[0]));
+    for (let i = 1; i < n; i++) g.lineTo(x(i), y(upper[i]));
+    g.strokeStyle = color; g.lineWidth = 1.8; g.stroke();
+  };
+  if (Math.max(...total) <= 0) return;   // nothing to plot yet (off): grid only
+  const zero = eth.map(() => 0);
+  area(zero, eth, css("--eth"));
+  area(eth, total, css("--hot"));
+}
+
+// ---------- status rendering ----------
+function setLink(el, l, isHot) {
+  const q = (k) => el.querySelector(`[data-k="${k}"]`);
+  q("ip").textContent = l.ip ? l.ip : (isHot ? settings.hot_ip || "not selected" : settings.eth_ip || "not selected");
+  q("speed").textContent = speedStr(l.speed);
+  q("share").textContent = running ? `${l.share}%` : "-";
+  q("shareBar").style.width = running ? `${l.share}%` : "0%";
+  q("conns").textContent = l.connections;
+  if (!isHot) { q("down").textContent = sizeStr(l.down); return; }
+  const used = l.down + l.up;
+  q("used").textContent = l.quota ? `${sizeStr(used)} of ${sizeStr(l.quota)}` : sizeStr(used);
+  q("limitWrap").classList.toggle("hidden", !l.quota);
+  q("limitBar").style.width = l.quota ? `${Math.min(100, (100 * used) / l.quota)}%` : "0%";
+  q("limitTag").classList.toggle("hidden", !l.over_quota);
+}
+
+function render(s) {
+  running = s.running;
+  $("power").classList.toggle("on", running);
+  const c = fmtSpeed(s.combined);
+  $("combined").innerHTML = `${c.n}<small>${c.u}</small>`;
+  $("ethMini").textContent = speedStr(s.links[0].speed);
+  $("hotMini").textContent = speedStr(s.links[1].speed);
+  $("stateLabel").innerHTML = running
+    ? "<b>On</b> · combining Ethernet and hotspot"
+    : "<b>Off</b> · press the button to combine your connections";
+  setLink($("linkEth"), s.links[0], false);
+  setLink($("linkHot"), s.links[1], true);
+  drawChart(s.links[0].history, s.links[1].history);
+
+  const chip = $("qbtChip"), st = s.qbt.state;
+  chip.className = "chip" + (st === "connected" ? " good" : (running && st !== "off" ? " warn" : ""));
+  chip.textContent = !running ? "qBittorrent: not in use"
+    : st === "connected" ? "✓ qBittorrent set up"
+    : st === "manual" ? "qBittorrent: manual setup"
+    : st === "auth" ? "qBittorrent: login needed" : "qBittorrent: not reachable";
+  const showBanner = running && (st === "unreachable" || st === "auth" || st === "error");
+  $("qbtBanner").classList.toggle("hidden", !showBanner);
+  if (showBanner) {
+    const auth = st === "auth";
+    $("bTitle").textContent = auth ? "qBittorrent needs a login" : "Let DualLink set up qBittorrent for you";
+    $("bText").textContent = auth ? s.qbt.message + " You can enter the Web UI username and password in Settings."
+                                  : "DualLink is running, but it can't reach qBittorrent yet. One-time setup:";
+    $("bSteps").classList.toggle("hidden", auth);
+  }
+  $("manualPort").textContent = s.port;
+  $("footLeft").textContent = s.auto
+    ? `Automatic balancing on${s.moved ? ` · ${s.moved} idle peer${s.moved === 1 ? "" : "s"} moved to the faster link` : ""}`
+    : "Fixed shares (automatic balancing off)";
+  $("footRight").textContent = running ? `Proxy running on 127.0.0.1:${s.port}` : `Proxy port ${s.port}`;
+  $("restartNote").classList.toggle("hidden", !running);
+}
+
+async function poll() {
+  try { render(await api.status()); } catch (e) { /* window closing */ }
+  setTimeout(poll, 1000);
+}
+
+// ---------- settings ----------
+function fillAdapters(list) {
+  for (const [sel, key] of [["s_eth", "eth_ip"], ["s_hot", "hot_ip"]]) {
+    const el = $(sel); el.innerHTML = "";
+    if (!list.length) el.innerHTML = "<option value=''>No connections found</option>";
+    else if (!settings[key]) el.innerHTML = "<option value='' disabled>Choose a connection…</option>";
+    for (const a of list) {
+      const o = document.createElement("option");
+      o.value = a.ip; o.textContent = `${a.name} - ${a.ip}`; el.appendChild(o);
+    }
+    el.value = settings[key] || "";
+  }
+}
+function fillSettings() {
+  const s = settings;
+  $("s_auto").checked = s.auto; $("s_recycle").checked = s.recycle;
+  $("s_share_eth").value = s.share_eth; $("s_share_hot").value = s.share_hot;
+  $("s_quota").value = s.quota_mb; $("s_port").value = s.port;
+  $("s_qbt_auto").checked = s.qbt_auto; $("s_qbt_url").value = s.qbt_url;
+  $("s_qbt_user").value = s.qbt_user; $("s_qbt_pass").value = s.qbt_pass;
+  $("s_reconnect").checked = s.reconnect; $("s_tray").checked = s.tray; $("s_autostart").checked = s.autostart;
+  syncVisibility();
+}
+function syncVisibility() {
+  $("manualShares").classList.toggle("hidden", $("s_auto").checked);
+  $("recycleRow").classList.toggle("hidden", !$("s_auto").checked);
+  $("qbtFields").classList.toggle("hidden", !$("s_qbt_auto").checked);
+}
+function collect() {
+  return {
+    eth_ip: $("s_eth").value, hot_ip: $("s_hot").value,
+    auto: $("s_auto").checked, recycle: $("s_recycle").checked,
+    share_eth: parseFloat($("s_share_eth").value) || 1, share_hot: parseFloat($("s_share_hot").value) || 1,
+    quota_mb: parseFloat($("s_quota").value) || 0, port: parseInt($("s_port").value) || 1080,
+    qbt_auto: $("s_qbt_auto").checked, qbt_url: $("s_qbt_url").value.trim(),
+    qbt_user: $("s_qbt_user").value, qbt_pass: $("s_qbt_pass").value,
+    reconnect: $("s_reconnect").checked, tray: $("s_tray").checked, autostart: $("s_autostart").checked,
+  };
+}
+function scheduleSave() {
+  syncVisibility();
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    const res = await api.save_settings(collect());
+    settings = res.settings;
+    if (res.error) toast(res.error, true);
+  }, 350);
+}
+function openSettings(open) {
+  $("drawer").classList.toggle("open", open); $("scrim").classList.toggle("open", open);
+}
+
+// ---------- wiring ----------
+async function init() {
+  const st = await api.get_init();
+  settings = st.settings;
+  fillAdapters(st.adapters); fillSettings();
+  document.querySelectorAll(".drawer input, .drawer select").forEach((el) =>
+    el.addEventListener(el.type === "checkbox" || el.tagName === "SELECT" ? "change" : "input", scheduleSave));
+  $("openSettings").onclick = () => openSettings(true);
+  $("closeSettings").onclick = $("scrim").onclick = () => openSettings(false);
+  document.addEventListener("keydown", (e) => e.key === "Escape" && openSettings(false));
+  $("refreshAdapters").onclick = async () => { const r = await api.refresh_adapters(); settings = r.settings; fillAdapters(r.adapters); toast("Connection list refreshed"); };
+  $("showManual").onclick = () => $("manualSteps").classList.toggle("hidden");
+  $("retryQbt").onclick = async () => { const q = await api.retry_qbt(); toast(q.state === "connected" ? "qBittorrent set up" : q.message, q.state !== "connected"); };
+  $("testQbt").onclick = async () => {
+    clearTimeout(saveTimer); settings = (await api.save_settings(collect())).settings;
+    const r = await api.test_qbt(); const el = $("testResult");
+    el.textContent = r.message; el.className = "result " + (r.ok ? "ok" : "err");
+  };
+  $("power").onclick = async () => {
+    const p = $("power"); p.classList.add("busy");
+    try {
+      const r = running ? await api.power(false) : await api.power(true);
+      if (!r.ok) { toast(r.message, true); if (/Settings/.test(r.message)) openSettings(true); }
+      render(await api.status());
+    } finally { p.classList.remove("busy"); }
+  };
+  if (!settings.eth_ip || !settings.hot_ip) openSettings(true);
+  poll();
+}
+window.addEventListener("resize", () => api && api.status().then(render));
+if (window.pywebview && window.pywebview.api) { api = window.pywebview.api; init(); }
+else window.addEventListener("pywebviewready", () => { api = window.pywebview.api; init(); });
+</script>
+</body>
+</html>
