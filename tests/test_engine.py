@@ -70,6 +70,25 @@ def test_burst_of_connections_is_spread(links):
         p.stop(); srv.close()
 
 
+def test_connect_by_hostname(links):
+    """qBittorrent sends tracker addresses as names when 'hostname lookup via proxy' is on."""
+    import socket, struct
+    p = BalancingProxy(links)
+    srv = PeerServer("burst")
+    p.start(0)
+    try:
+        c = socket.create_connection(("127.0.0.1", p.port), timeout=5)
+        c.sendall(b"\x05\x01\x00")
+        assert c.recv(2) == b"\x05\x00"
+        c.sendall(b"\x05\x01\x00\x03" + bytes([9]) + b"localhost" + struct.pack(">H", srv.port))
+        rep = c.recv(10)
+        assert rep[1] == 0, rep
+        assert read_all(c, 200_000) == 200_000
+        c.close()
+    finally:
+        p.stop(); srv.close()
+
+
 def test_falls_back_when_link_disabled(links):
     links[1].enabled = False
     p = BalancingProxy(links)

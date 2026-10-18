@@ -269,6 +269,7 @@ class Controller:
             "combined": sum(self._speed),
             "links": out,
             "moved": self.proxy.moved,
+            "dht": self.running and self.proxy.udp_assocs > 0,
             "port": self.proxy.port if self.running else self.cfg["port"],
             "qbt": self.qbt_state,
             "auto": bool(self.cfg["auto"]),

@@ -36,12 +36,14 @@ either Ethernet or the hotspot. A single torrent therefore uses both internet co
 
 ## Good to know
 
-- **Mobile data:** torrents use a lot of data, and if your hotspot is the faster link, most of the download
-  goes over it. Set a limit in Settings if your plan is capped.
-- **TCP only:** peer connections go through a SOCKS5 proxy, so uTP is turned off while DualLink is on.
+- **Mobile data:** if your hotspot is the faster link, most of the download goes over it. On a capped plan,
+  set a limit in Settings (off by default).
+- **TCP peers:** peer downloads use TCP so they can be balanced across both links. uTP is turned off while
+  DualLink is on.
   Other peers also can't connect in to you (outgoing connections work as normal).
-- **DHT / UDP trackers** don't go through the proxy yet. Torrents still get peers from HTTP trackers and from
-  other peers (peer exchange).
+- **DHT and UDP trackers work through DualLink.** This small, low-bandwidth traffic is kept on
+  Ethernet (or the hotspot if Ethernet is unavailable), so qBittorrent finds as many peers as without DualLink.
+  The footer shows "DHT connected" once qBittorrent is using it.
 - More peers means a better split: DualLink raises qBittorrent's connection limits to at least 500 / 200 per torrent.
 
 ## Troubleshooting
@@ -51,6 +53,7 @@ either Ethernet or the hotspot. A single torrent therefore uses both internet co
 | "qBittorrent: not reachable" | Turn on qBittorrent's Web UI (Install, step 2), then press **Try again**. |
 | "qBittorrent: login needed" | Enter the Web UI username/password in Settings, or tick *Bypass authentication for clients on localhost*. |
 | Hotspot shows connections but stays at 0 B/s | In an admin PowerShell run `netsh interface ipv4 set interface "<hotspot adapter name>" weakhostsend=enabled`, then turn DualLink off and on. |
+| "qBittorrent: not reachable" even though the Web UI is ticked | qBittorrent's **IP address** field must be just `127.0.0.1` (or `*`), not a full `http://...` address. |
 | "Could not listen on port 1080" | Another program uses that port. Pick a different proxy port in Settings. |
 | Hotspot not in the list | Connect the phone first, then press **refresh the list** in Settings. |
 

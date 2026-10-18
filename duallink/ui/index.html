@@ -437,7 +437,9 @@ function render(s) {
   $("footLeft").textContent = s.auto
     ? `Automatic balancing on${s.moved ? ` · ${s.moved} idle peer${s.moved === 1 ? "" : "s"} moved to the faster link` : ""}`
     : "Fixed shares (automatic balancing off)";
-  $("footRight").textContent = running ? `Proxy running on 127.0.0.1:${s.port}` : `Proxy port ${s.port}`;
+  $("footRight").textContent = running
+    ? `${s.dht ? "DHT connected · " : ""}Proxy running on 127.0.0.1:${s.port}`
+    : `Proxy port ${s.port}`;
   $("restartNote").classList.toggle("hidden", !running);
 }
 

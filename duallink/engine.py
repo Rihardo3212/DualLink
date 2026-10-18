@@ -63,6 +63,7 @@ class Link:
         self.quota_bytes = 0          # 0 = unlimited (applies to down+up)
         self.active = 0
         self.pending = 0          # connections being opened right now (counted so bursts spread out)
+        self.udp_bytes = 0        # DHT / UDP-tracker traffic (kept out of the speed measurements)
         self.down = 0
         self.up = 0
         self.failures = 0
@@ -73,7 +74,7 @@ class Link:
         self.measured_at = -1e9  # last time this link had a connection actually carrying data
 
     def over_quota(self):
-        return self.quota_bytes > 0 and (self.down + self.up) >= self.quota_bytes
+        return self.quota_bytes > 0 and (self.down + self.up + self.udp_bytes) >= self.quota_bytes
 
     def usable(self):
         return bool(self.ip) and self.enabled and not self.over_quota()
@@ -95,6 +96,103 @@ class Conn:
             self.last_busy = time.monotonic()
 
 
+class _UdpAssociation:
+    """One SOCKS5 UDP association: client <-> relay socket <-> per-link outbound sockets."""
+
+    def __init__(self, proxy, loop):
+        self.proxy, self.loop = proxy, loop
+        self.relay = None
+        self.client = None                      # (ip, port) qBittorrent sends from
+        self.out = {}                           # id(link) -> transport bound to that link's IP
+        self.dns = {}                           # hostname -> ip
+        self.closed = False
+
+    async def _outbound(self, link):
+        t = self.out.get(id(link))
+        if t is None:
+            t, _ = await self.loop.create_datagram_endpoint(
+                lambda: _RemoteSide(self, link), local_addr=(link.ip, 0))
+            self.out[id(link)] = t
+        return t
+
+    def from_client(self, data, addr):
+        if self.client is None:
+            self.client = addr
+        if addr != self.client or len(data) < 10 or data[2] != 0:   # wrong sender, or fragmented
+            return
+        atyp = data[3]
+        try:
+            if atyp == 1:
+                host, i = socket.inet_ntoa(data[4:8]), 8
+            elif atyp == 3:
+                n = data[4]
+                host, i = data[5:5 + n].decode("ascii", "ignore"), 5 + n
+            else:
+                return                                   # IPv6 destinations: not supported
+            port = struct.unpack(">H", data[i:i + 2])[0]
+        except Exception:
+            return
+        payload = data[i + 2:]
+        self.loop.create_task(self._send(host, port, payload, atyp == 3))
+
+    async def _send(self, host, port, payload, is_name):
+        if self.closed:
+            return
+        try:
+            if is_name:
+                ip = self.dns.get(host)
+                if ip is None:
+                    infos = await self.loop.getaddrinfo(host, port, family=socket.AF_INET, type=socket.SOCK_DGRAM)
+                    ip = self.dns[host] = infos[0][4][0]
+                host = ip
+            link = self.proxy.udp_link()
+            if link is None or self.closed:
+                return
+            t = await self._outbound(link)
+            t.sendto(payload, (host, port))
+            link.udp_bytes += len(payload)
+            self.proxy.udp_packets += 1
+        except Exception:
+            pass
+
+    def from_remote(self, link, data, addr):
+        if self.closed or self.client is None or self.relay is None:
+            return
+        link.udp_bytes += len(data)
+        header = b"\x00\x00\x00\x01" + socket.inet_aton(addr[0]) + struct.pack(">H", addr[1])
+        try:
+            self.relay.sendto(header + data, self.client)
+        except Exception:
+            pass
+
+    def close(self):
+        self.closed = True
+        for t in list(self.out.values()) + ([self.relay] if self.relay else []):
+            try:
+                t.close()
+            except Exception:
+                pass
+
+
+class _RelaySide(asyncio.DatagramProtocol):
+    def __init__(self, assoc):
+        self.assoc = assoc
+
+    def datagram_received(self, data, addr):
+        self.assoc.from_client(data, addr)
+
+
+class _RemoteSide(asyncio.DatagramProtocol):
+    def __init__(self, assoc, link):
+        self.assoc, self.link = assoc, link
+
+    def datagram_received(self, data, addr):
+        self.assoc.from_remote(self.link, data, addr)
+
+    def error_received(self, exc):
+        pass   # ICMP "port unreachable" from a dead DHT node: normal, ignore
+
+
 class BalancingProxy:
     """SOCKS5 (CONNECT only) proxy; each outgoing connection is bound to one link's local IP."""
 
@@ -111,6 +209,8 @@ class BalancingProxy:
         self.min_share = 0.15     # the slower link always keeps at least this share (keeps measuring it)
         self.conns = set()
         self.moved = 0
+        self.udp_assocs = 0       # open UDP associations (qBittorrent's DHT / UDP trackers)
+        self.udp_packets = 0
 
     # -- link choice -------------------------------------------------------- #
     def order(self):
@@ -250,18 +350,24 @@ class BalancingProxy:
             await reader.readexactly(n)
             writer.write(b"\x05\x00")
             ver, cmd, _, atyp = await reader.readexactly(4)
-            if cmd != 1:
+            if cmd not in (1, 3):
                 writer.write(b"\x05\x07\x00\x01\x00\x00\x00\x00\x00\x00")
                 return
             if atyp == 1:
                 host = socket.inet_ntoa(await reader.readexactly(4))
             elif atyp == 3:
                 ln = (await reader.readexactly(1))[0]
-                host = (await reader.readexactly(ln)).decode("idna", "ignore")
+                host = (await reader.readexactly(ln)).decode("ascii", "ignore")
+            elif atyp == 4 and cmd == 3:
+                await reader.readexactly(16)   # client's own address hint: not needed
+                host = ""
             else:
                 writer.write(b"\x05\x08\x00\x01\x00\x00\x00\x00\x00\x00")  # IPv6 not supported
                 return
             port = struct.unpack(">H", await reader.readexactly(2))[0]
+            if cmd == 3:
+                await self._udp_associate(reader, writer)
+                return
 
             loop = asyncio.get_running_loop()
             try:
@@ -317,6 +423,27 @@ class BalancingProxy:
                         w.close()
                     except Exception:
                         pass
+
+    # -- SOCKS5 UDP ASSOCIATE (DHT, UDP trackers) ------------------------------ #
+    def udp_link(self):
+        """UDP is many tiny packets: keep it on the first link (Ethernet) to save mobile data."""
+        return next((l for l in self.links if l.usable()), None)
+
+    async def _udp_associate(self, reader, writer):
+        loop = asyncio.get_running_loop()
+        assoc = _UdpAssociation(self, loop)
+        relay_t, _ = await loop.create_datagram_endpoint(
+            lambda: _RelaySide(assoc), local_addr=("127.0.0.1", 0))
+        assoc.relay = relay_t
+        port = relay_t.get_extra_info("sockname")[1]
+        writer.write(b"\x05\x00\x00\x01" + socket.inet_aton("127.0.0.1") + struct.pack(">H", port))
+        self.udp_assocs += 1
+        try:
+            while await reader.read(4096):   # the association lives as long as this TCP connection
+                pass
+        finally:
+            self.udp_assocs -= 1
+            assoc.close()
 
     async def _pump(self, r, w, link, direction, conn):
         try:
