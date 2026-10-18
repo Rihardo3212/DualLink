@@ -87,6 +87,8 @@
   .bar { height: 6px; border-radius: 99px; background: var(--panel-2); overflow: hidden; margin-top: 5px; }
   .bar i { display: block; height: 100%; width: 0; background: var(--c); border-radius: 99px; transition: width .6s ease; }
   .bar.limit i { background: var(--warn); }
+  .tag.wait { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
+  .link.waiting .link-speed, .link.waiting .rows { opacity: .45; }
   .tag { font-size: 11px; padding: 2px 7px; border-radius: 6px; background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); margin-left: 6px; }
 
   /* qbt banner */
@@ -220,7 +222,7 @@
     <div class="card link" style="--c:var(--eth)" id="linkEth">
       <div class="link-head">
         <div class="link-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></div>
-        <div><div class="link-name">Ethernet</div><div class="link-ip" data-k="ip">not selected</div></div>
+        <div><div class="link-name">Ethernet <span class="tag wait hidden" data-k="waitTag">waiting</span></div><div class="link-ip" data-k="ip">not selected</div></div>
         <div class="link-speed"><span data-k="speed">0 B/s</span><small>download</small></div>
       </div>
       <div class="rows">
@@ -232,7 +234,7 @@
     <div class="card link" style="--c:var(--hot)" id="linkHot">
       <div class="link-head">
         <div class="link-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M11 18.5h2"/></svg></div>
-        <div><div class="link-name">Phone hotspot <span class="tag hidden" data-k="limitTag">limit reached</span></div><div class="link-ip" data-k="ip">not selected</div></div>
+        <div><div class="link-name">Phone hotspot <span class="tag wait hidden" data-k="waitTag">waiting</span><span class="tag hidden" data-k="limitTag">limit reached</span></div><div class="link-ip" data-k="ip">not selected</div></div>
         <div class="link-speed"><span data-k="speed">0 B/s</span><small>download</small></div>
       </div>
       <div class="rows">
@@ -258,13 +260,13 @@
     </button>
   </div>
   <div class="drawer-body">
-    <div class="note hidden" id="restartNote">Changes to connections or port apply the next time you turn DualLink on.</div>
+    <div class="note hidden" id="restartNote">A new proxy port applies the next time you turn DualLink on. Connection changes apply right away.</div>
 
     <div class="section">
       <h4>Connections</h4>
       <div class="field"><label for="s_eth">Ethernet (home internet)</label><select id="s_eth"></select></div>
       <div class="field"><label for="s_hot">Phone hotspot</label><select id="s_hot"></select>
-        <div class="hint">Plug in or connect your phone first, then <button class="link-btn" id="refreshAdapters">refresh the list</button>.</div></div>
+        <div class="hint">DualLink remembers the connection by name and follows it if its address changes or it reconnects. Not listed? Connect your phone, then <button class="link-btn" id="refreshAdapters">refresh the list</button>.</div></div>
     </div>
 
     <div class="section">
@@ -391,7 +393,13 @@ function drawChart(eth, hot) {
 // ---------- status rendering ----------
 function setLink(el, l, isHot) {
   const q = (k) => el.querySelector(`[data-k="${k}"]`);
-  q("ip").textContent = l.ip ? l.ip : (isHot ? settings.hot_ip || "not selected" : settings.eth_ip || "not selected");
+  const name = l.adapter || (isHot ? settings.hot_name : settings.eth_name);
+  const waiting = running && !l.present;
+  el.classList.toggle("waiting", waiting);
+  q("waitTag").classList.toggle("hidden", !waiting);
+  q("ip").textContent = !name ? "not selected"
+    : waiting ? `${name} · not connected - will join automatically`
+    : `${name} · ${l.ip || (isHot ? settings.hot_ip : settings.eth_ip) || "not connected"}`;
   q("speed").textContent = speedStr(l.speed);
   q("share").textContent = running ? `${l.share}%` : "-";
   q("shareBar").style.width = running ? `${l.share}%` : "0%";
@@ -411,9 +419,11 @@ function render(s) {
   $("combined").innerHTML = `${c.n}<small>${c.u}</small>`;
   $("ethMini").textContent = speedStr(s.links[0].speed);
   $("hotMini").textContent = speedStr(s.links[1].speed);
-  $("stateLabel").innerHTML = running
-    ? "<b>On</b> · combining Ethernet and hotspot"
-    : "<b>Off</b> · press the button to combine your connections";
+  const [ethOk, hotOk] = s.links.map((l) => l.present);
+  $("stateLabel").innerHTML = !running ? "<b>Off</b> · press the button to combine your connections"
+    : ethOk && hotOk ? "<b>On</b> · combining Ethernet and hotspot"
+    : ethOk ? "<b>On</b> · using Ethernet only - waiting for the hotspot"
+    : "<b>On</b> · using the hotspot only - waiting for Ethernet";
   setLink($("linkEth"), s.links[0], false);
   setLink($("linkHot"), s.links[1], true);
   drawChart(s.links[0].history, s.links[1].history);
@@ -450,13 +460,14 @@ async function poll() {
 
 // ---------- settings ----------
 function fillAdapters(list) {
-  for (const [sel, key] of [["s_eth", "eth_ip"], ["s_hot", "hot_ip"]]) {
+  for (const [sel, key] of [["s_eth", "eth_name"], ["s_hot", "hot_name"]]) {
     const el = $(sel); el.innerHTML = "";
     if (!list.length) el.innerHTML = "<option value=''>No connections found</option>";
     else if (!settings[key]) el.innerHTML = "<option value='' disabled>Choose a connection…</option>";
     for (const a of list) {
       const o = document.createElement("option");
-      o.value = a.ip; o.textContent = `${a.name} - ${a.ip}`; el.appendChild(o);
+      o.value = a.name; o.textContent = a.present ? `${a.name} - ${a.ip}` : `${a.name} (not connected)`;
+      el.appendChild(o);
     }
     el.value = settings[key] || "";
   }
@@ -478,7 +489,7 @@ function syncVisibility() {
 }
 function collect() {
   return {
-    eth_ip: $("s_eth").value, hot_ip: $("s_hot").value,
+    eth_name: $("s_eth").value, hot_name: $("s_hot").value,
     auto: $("s_auto").checked, recycle: $("s_recycle").checked,
     share_eth: parseFloat($("s_share_eth").value) || 1, share_hot: parseFloat($("s_share_hot").value) || 1,
     quota_mb: parseFloat($("s_quota").value) || 0, port: parseInt($("s_port").value) || 1080,
@@ -493,7 +504,10 @@ function scheduleSave() {
   saveTimer = setTimeout(async () => {
     const res = await api.save_settings(collect());
     settings = res.settings;
-    if (res.error) toast(res.error, true);
+    if (res.error) {
+      toast(res.error, true);
+      $("s_eth").value = settings.eth_name; $("s_hot").value = settings.hot_name;   // undo the refused choice
+    }
   }, 350);
 }
 function openSettings(open) {
@@ -523,10 +537,11 @@ async function init() {
     try {
       const r = running ? await api.power(false) : await api.power(true);
       if (!r.ok) { toast(r.message, true); if (/Settings/.test(r.message)) openSettings(true); }
+      else if (r.message) toast(r.message);
       render(await api.status());
     } finally { p.classList.remove("busy"); }
   };
-  if (!settings.eth_ip || !settings.hot_ip) openSettings(true);
+  if (!settings.eth_name || !settings.hot_name) openSettings(true);
   poll();
 }
 window.addEventListener("resize", () => api && api.status().then(render));

@@ -20,6 +20,9 @@ either Ethernet or the hotspot. A single torrent therefore uses both internet co
   and reconnects running downloads. When it is turned off, your original qBittorrent settings are restored.
 - **Mobile data limit.** Optionally stop using the hotspot after a set amount of data. The rest
   continues over Ethernet.
+- **Follows your connections.** Adapters are remembered by name, so if your phone reconnects with a new
+  IP, is unplugged, or comes back (even on another USB port), DualLink adapts within seconds. You can turn
+  it on before plugging in the phone, and the hotspot joins automatically.
 - Runs in the system tray, shows live speed graphs, and can start with Windows.
 
 ## Install
@@ -55,7 +58,7 @@ either Ethernet or the hotspot. A single torrent therefore uses both internet co
 | Hotspot shows connections but stays at 0 B/s | In an admin PowerShell run `netsh interface ipv4 set interface "<hotspot adapter name>" weakhostsend=enabled`, then turn DualLink off and on. |
 | "qBittorrent: not reachable" even though the Web UI is ticked | qBittorrent's **IP address** field must be just `127.0.0.1` (or `*`), not a full `http://...` address. |
 | "Could not listen on port 1080" | Another program uses that port. Pick a different proxy port in Settings. |
-| Hotspot not in the list | Connect the phone first, then press **refresh the list** in Settings. |
+| Hotspot not in the list | Connect the phone first, then press **refresh the list** in Settings. A remembered but unplugged connection shows as *(not connected)*. |
 
 ## Build from source
 

@@ -108,11 +108,12 @@ class _UdpAssociation:
         self.closed = False
 
     async def _outbound(self, link):
-        t = self.out.get(id(link))
+        key = (id(link), link.ip)           # a new IP (reconnected phone) needs a new socket
+        t = self.out.get(key)
         if t is None:
             t, _ = await self.loop.create_datagram_endpoint(
                 lambda: _RemoteSide(self, link), local_addr=(link.ip, 0))
-            self.out[id(link)] = t
+            self.out[key] = t
         return t
 
     def from_client(self, data, addr):
@@ -326,6 +327,12 @@ class BalancingProxy:
             t.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         asyncio.get_running_loop().stop()
+
+    def close_link(self, link):
+        """Close every connection on a link (adapter gone or new IP); qBittorrent reconnects them."""
+        loop = self.loop
+        if loop and loop.is_running():
+            loop.call_soon_threadsafe(lambda: [c.task.cancel() for c in list(self.conns) if c.link is link])
 
     def stop(self):
         loop, thread = self.loop, self.thread

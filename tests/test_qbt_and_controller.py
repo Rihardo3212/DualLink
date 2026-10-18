@@ -59,7 +59,7 @@ def test_unreachable():
 def make_ctl(tmp_path, qbt_url):
     adapters = lambda: [("Ethernet adapter Ethernet", "127.0.0.1"), ("Ethernet adapter Ethernet 2", "127.0.0.2")]
     ctl = Controller(cfg_path=tmp_path / "cfg.json", adapter_lister=adapters)
-    ctl.update_settings({"eth_ip": "127.0.0.1", "hot_ip": "127.0.0.2", "port": 0, "qbt_url": qbt_url})
+    ctl.update_settings({"eth_name": "Ethernet", "hot_name": "Ethernet 2", "port": 0, "qbt_url": qbt_url})
     return ctl
 
 
@@ -86,14 +86,14 @@ def test_controller_runs_without_qbt(tmp_path):
 
 
 def test_controller_rejects_bad_setup(tmp_path):
+    from duallink.controller import SettingsError
     ctl = make_ctl(tmp_path, "http://127.0.0.1:1")
-    ctl.update_settings({"hot_ip": "127.0.0.1"})
-    assert not ctl.power_on()["ok"]
-    ctl.update_settings({"hot_ip": "10.9.9.9"})        # adapter that doesn't exist
-    ctl.cfg["hot_ip"] = "10.9.9.9"
-    ctl._list_adapters = lambda: [("Ethernet adapter Ethernet", "127.0.0.1")]
+    with pytest.raises(SettingsError):
+        ctl.update_settings({"hot_name": "Ethernet"})          # same adapter twice
+    assert ctl.cfg["hot_name"] == "Ethernet 2"                  # refused change not applied
+    ctl._list_adapters = lambda: []                             # nothing connected at all
     r = ctl.power_on()
-    assert not r["ok"]
+    assert not r["ok"] and "Neither" in r["message"]
 
 
 def test_adapter_names_and_hotspot_guess(tmp_path):
@@ -101,4 +101,5 @@ def test_adapter_names_and_hotspot_guess(tmp_path):
         ("Ethernet adapter Ethernet", "192.168.8.5"), ("Ethernet adapter Ethernet 2", "172.20.10.3")])
     items = ctl.adapters()
     assert items[0]["name"] == "Ethernet" and items[1]["hotspot"]
+    assert ctl.cfg["eth_name"] == "Ethernet" and ctl.cfg["hot_name"] == "Ethernet 2"
     assert ctl.cfg["eth_ip"] == "192.168.8.5" and ctl.cfg["hot_ip"] == "172.20.10.3"

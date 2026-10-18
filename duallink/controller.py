@@ -15,8 +15,13 @@ from .qbt import QbtError, QbtWebUI
 
 HISTORY = 90  # seconds of speed history kept for the graph
 
+# Phone tethering address ranges (iPhone, Android USB/Wi-Fi). Used to find the hotspot again if it
+# comes back as a differently-named adapter (e.g. a different USB port).
+PHONE_RANGES = ("172.20.10.", "192.168.42.", "192.168.43.")
+
 DEFAULTS = {
-    "eth_ip": "", "hot_ip": "",
+    "eth_name": "", "hot_name": "",      # adapters are remembered by name - their IP may change
+    "eth_ip": "", "hot_ip": "",          # last known addresses (display + migration from 1.0/1.1)
     "auto": True, "recycle": True,
     "share_eth": 1.0, "share_hot": 1.0,
     "quota_mb": 0,
@@ -52,6 +57,10 @@ def is_virtual(name):
     return any(h in low for h in VIRTUAL_HINTS)
 
 
+class SettingsError(ValueError):
+    """A settings change that was refused, with a message meant for the user."""
+
+
 class Controller:
     def __init__(self, cfg_path=None, adapter_lister=list_adapters):
         self.cfg_path = pathlib.Path(cfg_path) if cfg_path else config_dir() / "config.json"
@@ -69,8 +78,10 @@ class Controller:
         self._speed = [0.0, 0.0]
         self._last = [(0, time.time()), (0, time.time())]
         self._quota_warned = False
+        self.watch_every = 3.0                     # seconds between adapter checks while running
         self._sampler = threading.Thread(target=self._sample_loop, daemon=True)
         self._sampler.start()
+        threading.Thread(target=self._watch_loop, daemon=True).start()
         if self.cfg.get("qbt_saved"):   # DualLink was not shut down cleanly last time
             threading.Thread(target=self._restore_leftover, daemon=True).start()
 
@@ -92,6 +103,11 @@ class Controller:
 
     def update_settings(self, new):
         allowed = set(DEFAULTS) - {"qbt_saved"}
+        new = dict(new or {})
+        eth = new.get("eth_name", self.cfg["eth_name"])
+        hot = new.get("hot_name", self.cfg["hot_name"])
+        if eth and eth == hot:
+            raise SettingsError("Ethernet and hotspot must be two different connections.")
         with self._lock:
             for k, v in (new or {}).items():
                 if k in allowed:
@@ -103,6 +119,8 @@ class Controller:
                 self.cfg[k] = max(0.1, float(self.cfg.get(k) or 1))
             self.save()
             self._apply_live_settings()
+        if self.running and ("eth_name" in new or "hot_name" in new):
+            self.check_adapters()          # switch connections right away
         return self.public_settings()
 
     def _apply_live_settings(self):
@@ -116,22 +134,48 @@ class Controller:
             self._quota_warned = False
 
     # ---- adapters ---------------------------------------------------------- #
+    def _scan(self):
+        items, seen = [], set()
+        for n, ip in self._list_adapters():
+            name = pretty_adapter(n)
+            if name in seen:          # adapter with several IPv4 addresses: keep the first
+                continue
+            seen.add(name)
+            items.append({"name": name, "ip": ip, "hotspot": looks_like_hotspot(n, ip)})
+        return items
+
+    @staticmethod
+    def _ip_of(items, name):
+        return next((a["ip"] for a in items if a["name"] == name), "") if name else ""
+
     def adapters(self):
-        items = [{"name": pretty_adapter(n), "ip": ip, "hotspot": looks_like_hotspot(n, ip)}
-                 for n, ip in self._list_adapters()]
-        ips = [a["ip"] for a in items]
+        """Adapters for the Settings list. Fills in sensible defaults on first run."""
+        items = self._scan()
         real = [a for a in items if not is_virtual(a["name"])] or items
         with self._lock:
-            hot, eth = self.cfg["hot_ip"], self.cfg["eth_ip"]
-            if hot not in ips:
-                hot = next((a["ip"] for a in real if a["hotspot"] and a["ip"] != eth), "")
-            if eth not in ips or eth == hot:
-                eth = next((a["ip"] for a in real if a["ip"] != hot and not a["hotspot"]), "") or \
-                      next((a["ip"] for a in real if a["ip"] != hot), "")
-            if not hot:   # nothing looks like a phone: use the other real connection
-                hot = next((a["ip"] for a in real if a["ip"] != eth), "")
-            self.cfg["hot_ip"], self.cfg["eth_ip"] = hot, eth
-        return items
+            # migrate settings from 1.0/1.1, which stored IPs only
+            for key in ("eth", "hot"):
+                if not self.cfg[f"{key}_name"] and self.cfg[f"{key}_ip"]:
+                    self.cfg[f"{key}_name"] = next((a["name"] for a in items if a["ip"] == self.cfg[f"{key}_ip"]), "")
+            eth, hot = self.cfg["eth_name"], self.cfg["hot_name"]
+            # first run: guess. A saved choice is never replaced just because it's unplugged right now.
+            if not hot:
+                hot = next((a["name"] for a in real if a["hotspot"] and a["name"] != eth), "")
+            if not eth:
+                eth = next((a["name"] for a in real if a["name"] != hot and not a["hotspot"]), "") or \
+                      next((a["name"] for a in real if a["name"] != hot), "")
+            if not hot:
+                hot = next((a["name"] for a in real if a["name"] != eth), "")
+            self.cfg["eth_name"], self.cfg["hot_name"] = eth, hot
+            for key, name in (("eth", eth), ("hot", hot)):
+                ip = self._ip_of(items, name)
+                if ip:
+                    self.cfg[f"{key}_ip"] = ip
+        out = [dict(a, present=True) for a in items]
+        for name in (eth, hot):          # keep an unplugged choice visible in the list
+            if name and not any(a["name"] == name for a in items):
+                out.append({"name": name, "ip": "", "hotspot": False, "present": False})
+        return out
 
     # ---- qBittorrent ------------------------------------------------------- #
     def _qbt(self):
@@ -162,19 +206,24 @@ class Controller:
         with self._lock:
             if self.running:
                 return {"ok": True}
-            known = {ip for _n, ip in self._list_adapters()}
-            eth, hot = self.cfg["eth_ip"], self.cfg["hot_ip"]
+            eth, hot = self.cfg["eth_name"], self.cfg["hot_name"]
             if not eth or not hot:
                 return {"ok": False, "message": "Pick both an Ethernet and a hotspot connection in Settings."}
             if eth == hot:
                 return {"ok": False, "message": "Ethernet and hotspot must be two different connections."}
-            missing = [n for n, ip in (("Ethernet", eth), ("Hotspot", hot)) if ip not in known]
-            if missing:
-                return {"ok": False, "message": f"{' and '.join(missing)} connection is not available right now. "
-                                                "Check it's connected, then pick it again in Settings."}
-            self.links[0].ip, self.links[1].ip = eth, hot
-            for l in self.links:
-                l.down = l.up = l.failures = 0
+            items = self._scan()
+            ips = [self._ip_of(items, eth), self._ip_of(items, hot)]
+            if not any(ips):
+                return {"ok": False, "message": "Neither connection is available right now. "
+                                                "Check that Ethernet or your phone is connected."}
+            note = None
+            if not ips[0]:
+                note = f"{eth} isn't connected - DualLink is using the hotspot and will add Ethernet when it's back."
+            elif not ips[1]:
+                note = f"{hot} isn't connected yet - DualLink will add the hotspot automatically when it appears."
+            for l, ip in zip(self.links, ips):
+                l.ip = ip
+                l.down = l.up = l.failures = l.udp_bytes = 0
                 l.rate = l.per_conn = 0.0
                 l._last_down = 0
                 l.measured_at = -1e9
@@ -190,12 +239,14 @@ class Controller:
                 return {"ok": False, "message": str(e)}
             self.running = True
 
+        if note:
+            self.notify("DualLink is on", note)
         if self.cfg["qbt_auto"]:
             self._qbt_apply()
         else:
             self.qbt_state = {"state": "manual", "message": "Automatic qBittorrent setup is off."}
         self.on_change()
-        return {"ok": True}
+        return {"ok": True, "message": note} if note else {"ok": True}
 
     def _qbt_apply(self):
         try:
@@ -235,6 +286,54 @@ class Controller:
             self._qbt_apply()
         return self.qbt_state
 
+    # ---- following adapters while running ------------------------------------ #
+    def _watch_loop(self):
+        last = 0.0
+        while True:
+            time.sleep(0.1)
+            if self.running and time.monotonic() - last >= self.watch_every:
+                last = time.monotonic()
+                try:
+                    self.check_adapters()
+                except Exception:
+                    pass
+
+    def check_adapters(self):
+        """Follow IP changes, unplugging and re-plugging of both connections."""
+        items = self._scan()
+        changed = False
+        for key, link, label in (("eth", self.links[0], "Ethernet"), ("hot", self.links[1], "Hotspot")):
+            name = self.cfg[f"{key}_name"]
+            ip = self._ip_of(items, name)
+            if not ip and key == "hot":
+                # the phone may come back as a differently-named adapter (another USB port, Wi-Fi instead of USB)
+                other = self.cfg["eth_name"]
+                cand = next((a for a in items if a["ip"].startswith(PHONE_RANGES) and a["name"] != other), None)
+                if cand:
+                    self.cfg["hot_name"], ip = cand["name"], cand["ip"]
+                    changed = True
+            if ip == link.ip or not self.running:
+                continue
+            old, link.ip = link.ip, ip
+            if old:
+                self.proxy.close_link(link)          # its connections are dead or on the old address
+            if not ip:
+                self.notify(f"{label} disconnected",
+                            f"Downloads continue over the other connection. DualLink will add {label.lower()} "
+                            f"back automatically when it reconnects.")
+            elif not old:
+                link.measured_at = -1e9              # treat as unknown again: fair share until measured
+                self.notify(f"{label} connected", f"DualLink is using {self.cfg[f'{key}_name']} again ({ip}).")
+            else:
+                link.measured_at = -1e9
+                self.notify(f"{label} got a new address", f"DualLink switched to {ip} automatically.")
+            if ip:
+                self.cfg[f"{key}_ip"] = ip
+            changed = True
+        if changed:
+            self.save()
+            self.on_change()
+
     # ---- stats -------------------------------------------------------------- #
     def _sample_loop(self):
         while True:
@@ -259,6 +358,8 @@ class Controller:
         for i, l in enumerate(self.links):
             out.append({
                 "name": l.name, "ip": l.ip, "connections": l.active,
+                "adapter": self.cfg["eth_name" if i == 0 else "hot_name"],
+                "present": bool(l.ip) or not self.running,
                 "share": round(100 * l.weight / wsum) if (self.running and l.usable()) else 0,
                 "speed": self._speed[i], "down": l.down, "up": l.up,
                 "quota": l.quota_bytes, "over_quota": l.over_quota(),

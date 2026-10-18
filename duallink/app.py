@@ -5,7 +5,7 @@ import threading
 
 import webview
 
-from .controller import Controller, set_autostart
+from .controller import Controller, SettingsError, set_autostart
 from .icon import make_icon
 
 
@@ -44,6 +44,8 @@ class Api:
         before = bool(self._ctl.cfg.get("autostart"))
         try:
             settings = self._ctl.update_settings(new)
+        except SettingsError as e:
+            return {"settings": self._ctl.public_settings(), "error": str(e)}
         except (TypeError, ValueError):
             return {"settings": self._ctl.public_settings(), "error": "Some settings were not valid numbers."}
         error = None
