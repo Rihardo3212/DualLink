@@ -250,7 +250,7 @@
         <div class="hint">Not listed? Connect your phone, then <button class="link-btn" id="refreshAdapters">refresh the list</button>.</div></div>
       <div id="extraList"></div>
       <button class="link-btn" id="addExtra" style="font-size:13px">+ Add another connection</button>
-      <div class="hint">For example Wi-Fi or a second phone. Up to two extra connections.</div>
+      <div class="hint" id="extraHint">For example Wi-Fi or a second phone. Up to two extra connections.</div>
     </div>
     <div class="section">
       <h4>Balancing</h4>
@@ -516,7 +516,11 @@ function fillExtras() {
   }));
   const used = new Set([settings.eth_name, settings.hot_name, ...extra]);
   const free = adapterList.filter((a) => a.present && !used.has(a.name));
-  $("addExtra").classList.toggle("hidden", extra.length >= 2 || !free.length);
+  $("addExtra").classList.toggle("hidden", extra.length >= 2);
+  $("extraHint").textContent = extra.length >= 2 ? "That's the maximum of two extra connections."
+    : free.length ? `Available now: ${free.map((a) => a.name).join(", ")}.`
+    : extra.length ? "You can add one more - connect it first, for example Wi-Fi or a second phone."
+    : "For example Wi-Fi or a second phone - connect it first, then add it here.";
 }
 function fillAdapters(list) {
   adapterList = list;
@@ -818,10 +822,14 @@ async function init() {
   $("openCheck").onclick = openTrafficCheck;
   $("mClose").onclick = $("mScrim").onclick = closeModal;
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") { openSettings(false); closeModal(); } });
-  $("addExtra").onclick = () => {
-    const used = new Set([settings.eth_name, settings.hot_name, ...(settings.extra || [])]);
-    const pick = adapterList.find((a) => a.present && !used.has(a.name));
-    if (!pick) return toast("No other connection found - connect it, then refresh the list", true);
+  $("addExtra").onclick = async () => {
+    const used = () => new Set([settings.eth_name, settings.hot_name, ...(settings.extra || [])]);
+    let pick = adapterList.find((a) => a.present && !used().has(a.name));
+    if (!pick) {                                  // maybe it was just plugged in: look again
+      const r = await api.refresh_adapters(); settings = r.settings; fillAdapters(r.adapters);
+      pick = adapterList.find((a) => a.present && !used().has(a.name));
+    }
+    if (!pick) return toast("No other connection found. Connect Wi-Fi, a second phone or another network adapter, then try again.", true);
     save({ extra: [...(settings.extra || []), pick.name] }); fillExtras();
   };
   $("refreshAdapters").onclick = async () => { const r = await api.refresh_adapters(); settings = r.settings; fillAdapters(r.adapters); toast("Connection list refreshed"); };
