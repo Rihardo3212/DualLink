@@ -52,6 +52,24 @@ Filename: "{sys}\taskkill.exe"; Parameters: "/f /im DualLink.exe"; Flags: runhid
 Filename: "{app}\DualLink.exe"; Parameters: "--cleanup"; Flags: runhidden waituntilterminated; RunOnceId: "CleanupDualLink"
 
 [Code]
+function SetEnvironmentVariable(lpName: String; lpValue: String): Boolean;
+  external 'SetEnvironmentVariableW@kernel32.dll stdcall';
+
+// DualLink.exe is a one-file PyInstaller app. When an older DualLink starts this installer during an in-app
+// update, its hidden PyInstaller variables are passed on to the new DualLink we start at the end, which then
+// looks for the old (deleted) temporary folder: "Failed to load Python DLL". This tells it to start fresh.
+function InitializeSetup(): Boolean;
+begin
+  SetEnvironmentVariable('PYINSTALLER_RESET_ENVIRONMENT', '1');
+  Result := True;
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+  SetEnvironmentVariable('PYINSTALLER_RESET_ENVIRONMENT', '1');
+  Result := True;
+end;
+
 function IsInAppUpdate: Boolean;
 begin
   Result := ExpandConstant('{param:update|0}') = '1';

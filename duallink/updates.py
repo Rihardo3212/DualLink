@@ -127,10 +127,23 @@ def download(asset, dest_dir=None, progress=lambda done, total: None, opener=url
 DETACHED = 0x00000008 | 0x00000200      # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
 
 
+def independent_env():
+    """Environment for programs that must outlive this one.
+
+    A one-file PyInstaller app passes hidden variables to the programs it starts, pointing at its temporary
+    unpack folder. A new DualLink started from here (directly or via the installer) would otherwise look for
+    that folder after this process has deleted it: "Failed to load Python DLL ... _MEI...". This documented
+    PyInstaller variable makes it start as a fresh, independent app instead.
+    """
+    env = dict(os.environ)
+    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    return env
+
+
 def run_installer(path):
     """Silent update; the installer starts the new DualLink when it's done (see installer/DualLink.iss)."""
     subprocess.Popen([str(path), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/update=1"],
-                     close_fds=True, creationflags=DETACHED if os.name == "nt" else 0)
+                     close_fds=True, env=independent_env(), creationflags=DETACHED if os.name == "nt" else 0)
 
 
 def swap_portable(new_exe, current_exe=None, launch=True):
@@ -146,7 +159,7 @@ def swap_portable(new_exe, current_exe=None, launch=True):
         old.rename(current)                   # put the original back
         raise
     if launch:
-        subprocess.Popen([str(current), "--updated"], close_fds=True,
+        subprocess.Popen([str(current), "--updated"], close_fds=True, env=independent_env(),
                          creationflags=DETACHED if os.name == "nt" else 0)
     return current
 

@@ -179,3 +179,20 @@ def test_update_errors_are_reported(tmp_path):
 
 def test_single_instance_off_windows():
     assert instance.acquire() is True
+
+
+def test_started_programs_get_a_fresh_pyinstaller_environment(tmp_path, monkeypatch):
+    """Regression: "Failed to load Python DLL ... _MEI..." after an in-app update (1.8.1)."""
+    launched = []
+    monkeypatch.setattr(updates.subprocess, "Popen", lambda args, **kw: launched.append((args, kw)))
+    monkeypatch.setenv("_PYI_APPLICATION_HOME_DIR", r"C:\Users\me\AppData\Local\Temp\_MEI12345")
+    updates.run_installer(tmp_path / "DualLink-Setup-9.9.9.exe")
+    cur = tmp_path / "DualLink.exe"
+    cur.write_bytes(b"old")
+    new = tmp_path / "new.exe"
+    new.write_bytes(b"new")
+    updates.swap_portable(new, cur, launch=True)
+    assert len(launched) == 2
+    for args, kw in launched:
+        assert kw["env"]["PYINSTALLER_RESET_ENVIRONMENT"] == "1"
+    assert "/update=1" in launched[0][0] and launched[1][0][1] == "--updated"
