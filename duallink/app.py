@@ -34,7 +34,7 @@ class Api:
         return {"settings": self._ctl.public_settings(), "adapters": adapters}
 
     def status(self):
-        return self._ctl.status()
+        return self._ctl.status(for_ui=True)
 
     def refresh_adapters(self):
         adapters = self._ctl.adapters()
@@ -106,6 +106,10 @@ class DualLinkApp:
             background_color="#0e1015",
         )
         self.window.events.closing += self._on_closing
+        for name, visible in (("minimized", False), ("restored", True), ("shown", True), ("maximized", True)):
+            event = getattr(self.window.events, name, None)        # not every pywebview version has all
+            if event is not None:
+                event += (lambda v: (lambda *a: setattr(self.ctl, "ui_visible", v)))(visible)
         self.ctl.notify = self._notify
         self.ctl.on_change = self._refresh_tray
         self.ctl.quit_app = self._quit_for_update
@@ -166,6 +170,7 @@ class DualLinkApp:
 
     # ---- window -------------------------------------------------------------- #
     def show(self):
+        self.ctl.ui_visible = True
         self.window.show()
         try:
             self.window.restore()
@@ -180,6 +185,7 @@ class DualLinkApp:
                 self.tray.stop()
             return True
         self.window.hide()
+        self.ctl.ui_visible = False
         if not self.ctl.cfg.get("tray_hint_shown"):
             self.ctl.cfg["tray_hint_shown"] = True
             self.ctl.save()

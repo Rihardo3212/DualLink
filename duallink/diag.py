@@ -45,11 +45,42 @@ def parse_ipconfig(text):
     return out
 
 
+# ---- Windows API first, command-line tools as fallback ------------------------------------ #
+def _adapters_full():
+    if os.name == "nt":
+        try:
+            from . import winapi
+            return {a["name"]: {"v4": a["v4"], "v6": a["v6"]} for a in winapi.adapters()}
+        except Exception:
+            pass
+    return parse_ipconfig(_run(["ipconfig"]))
+
+
+def _tcp_rows():
+    if os.name == "nt":
+        try:
+            from . import winapi
+            return winapi.tcp_connections()
+        except Exception:
+            pass
+    return parse_netstat(_run(["netstat", "-ano", "-p", "TCP"]) + "\n" + _run(["netstat", "-ano", "-p", "TCPv6"]))
+
+
+def _program_names(pids):
+    if os.name == "nt":
+        try:
+            from . import winapi
+            return winapi.process_names(pids)
+        except Exception:
+            pass
+    return parse_tasklist(_run(["tasklist", "/fo", "csv", "/nh"]))
+
+
 def adapter_ipv6():
     """{adapter_name: global IPv6 address} (Windows only)."""
     if os.name != "nt":
         return {}
-    return {n: a["v6"][0] for n, a in parse_ipconfig(_run(["ipconfig"])).items() if a["v6"]}
+    return {n: a["v6"][0] for n, a in _adapters_full().items() if a["v6"]}
 
 
 # ---- netstat -ano: TCP connections with owning process ------------------------------ #
@@ -107,9 +138,9 @@ def adapter_rx_bytes():
 
 def connections_snapshot(proxy_port, own_pid):
     """Who is connected through DualLink, and who connects directly over each adapter."""
-    adapters = parse_ipconfig(_run(["ipconfig"]))
-    rows = parse_netstat(_run(["netstat", "-ano", "-p", "TCP"]) + "\n" + _run(["netstat", "-ano", "-p", "TCPv6"]))
-    names = parse_tasklist(_run(["tasklist", "/fo", "csv", "/nh"]))
+    adapters = _adapters_full()
+    rows = _tcp_rows()
+    names = _program_names({r[4] for r in rows})
     return summarize(rows, names, adapters, proxy_port, own_pid)
 
 
@@ -139,11 +170,11 @@ def proxy_clients(proxy_port, own_pid):
     """{program_name: connections} for programs connected to DualLink's port (Windows only)."""
     if os.name != "nt":
         return {}
-    rows = parse_netstat(_run(["netstat", "-ano", "-p", "TCP"]) + "\n" + _run(["netstat", "-ano", "-p", "TCPv6"]))
+    rows = _tcp_rows()
     mine = [pid for _l, _lp, rip, rport, pid in rows
             if rip in ("127.0.0.1", "::1") and rport == str(proxy_port) and pid not in (own_pid, 0, 4)]
-    if any(pid not in _names for pid in mine):           # only run tasklist when a new program shows up
-        _names.update(parse_tasklist(_run(["tasklist", "/fo", "csv", "/nh"])))
+    if any(pid not in _names for pid in mine):           # only look up names when a new program shows up
+        _names.update(_program_names(set(mine)))
     counts = {}
     for pid in mine:
         name = _names.get(pid, f"PID {pid}")

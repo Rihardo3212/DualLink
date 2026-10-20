@@ -30,8 +30,13 @@ RestartApplications=no
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
+[InstallDelete]
+; versions up to 1.8 installed a single self-extracting DualLink.exe; newer ones install a folder.
+; Remove the previous version's support files first so nothing outdated is left behind.
+Type: filesandordirs; Name: "{app}\_internal"
+
 [Files]
-Source: "..\dist\DualLink.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\folder\DualLink\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\DualLink"; Filename: "{app}\DualLink.exe"

@@ -496,9 +496,17 @@ function render(s) {
   $("verText").textContent = `DualLink ${s.version}`;
 }
 async function poll() {
-  try { render(await api.status()); } catch (e) { /* closing */ }
-  setTimeout(poll, 1000);
+  let wait = 1000;
+  try {
+    if (document.hidden) wait = 3000;                 // minimised: don't fetch or draw anything
+    else {
+      const s = await api.status();
+      if (s.hidden) wait = 3000; else render(s);      // hidden in the tray: same
+    }
+  } catch (e) { /* closing */ }
+  setTimeout(poll, wait);
 }
+document.addEventListener("visibilitychange", () => { if (!document.hidden && api) api.status().then((s) => !s.hidden && render(s)); });
 
 // ---------- settings ----------
 let adapterList = [];

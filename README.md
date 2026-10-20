@@ -37,6 +37,9 @@ A single torrent or a single file therefore uses both internet connections.
 - **Traffic check.** Shows which programs are connected through DualLink, which ones connect directly
   around it, and how much traffic Windows sees on each connection compared with what DualLink carries.
 - **IPv4 and IPv6.** Apps that hand DualLink an IPv6 address are split over both links too.
+- **Light on your PC.** At ~14 MiB/s over 80 connections the proxy uses about 10 % of one CPU core and can
+  relay over 1 GiB/s; network information comes straight from Windows (no helper programs started in the
+  background), and the window stops updating while it's hidden.
 - Runs in the system tray, shows live speed graphs, and can start with Windows.
 
 ## Apps
@@ -122,7 +125,8 @@ duallink/engine.py         SOCKS5 proxy + automatic balancing (no dependencies)
 duallink/qbt.py            qBittorrent Web UI setup/restore
 duallink/speedtest.py      per-link speed test
 duallink/updates.py        update check against GitHub Releases
-duallink/diag.py           traffic check (netstat/tasklist/netsh)
+duallink/diag.py           traffic check and live app status
+duallink/winapi.py         adapters, TCP connections and program names straight from Windows
 installer/DualLink.iss     Windows installer script
 duallink/controller.py     settings, on/off, statistics, start-with-Windows
 duallink/app.py            window (pywebview) + system tray (pystray)

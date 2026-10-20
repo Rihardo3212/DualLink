@@ -51,7 +51,7 @@ def test_hotspot_gets_new_ip(env):
     assert ctl.power_on()["ok"]
     ad.named["Ethernet 2"] = "127.0.0.3"                     # phone reconnected with a new address
     assert wait_for(lambda: ctl.links[1].ip == "127.0.0.3")
-    assert "Hotspot got a new address" in notes
+    assert wait_for(lambda: "Hotspot got a new address" in notes)
     conns = open_conns(ctl, srv, 6)
     assert wait_for(lambda: "127.0.0.3" in srv.sources)       # new connections use the new IP
     assert "127.0.0.2" not in srv.sources
@@ -69,7 +69,7 @@ def test_unplug_and_replug_phone(env):
     del ad.named["Ethernet 2"]                               # phone unplugged
     assert wait_for(lambda: ctl.links[1].ip == "")
     assert wait_for(lambda: ctl.links[1].active == 0)         # its connections were closed right away
-    assert "Hotspot disconnected" in notes
+    assert wait_for(lambda: "Hotspot disconnected" in notes)
     st = ctl.status()["links"][1]
     assert st["present"] is False and st["adapter"] == "Ethernet 2"
     n_before = len(srv.sources)
@@ -78,7 +78,7 @@ def test_unplug_and_replug_phone(env):
     assert set(srv.sources[n_before:]) == {"127.0.0.1"}
     ad.named["Ethernet 2"] = "127.0.0.2"                     # plugged back in
     assert wait_for(lambda: ctl.links[1].ip == "127.0.0.2")
-    assert "Hotspot connected" in notes
+    assert wait_for(lambda: "Hotspot connected" in notes)
     assert ctl.cfg["hot_name"] == "Ethernet 2"               # the saved choice was never replaced
     for c in conns + more:
         c.close()

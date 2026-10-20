@@ -80,7 +80,7 @@ def test_extra_link_unplugged_and_back(tmp_path):
         assert ctl.power_on()["ok"]
         del ad.named["Wi-Fi"]
         assert wait_for(lambda: ctl.links[2].ip == "")
-        assert "Wi-Fi connection disconnected" in notes
+        assert wait_for(lambda: "Wi-Fi connection disconnected" in notes)
         assert ctl.status()["links"][2]["present"] is False
         ad.named["Wi-Fi"] = "127.0.0.3"
         assert wait_for(lambda: ctl.links[2].ip == "127.0.0.3")

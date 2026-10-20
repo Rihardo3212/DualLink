@@ -18,7 +18,15 @@ import time
 def list_adapters():
     """Return [(adapter_name, ipv4)] for usable IPv4 addresses."""
     found = []
+    api_ok = False
     if os.name == "nt":
+        try:                                    # ask Windows directly (no ipconfig process)
+            from . import winapi
+            found = [(a["name"], ip) for a in winapi.adapters() for ip in a["v4"]]
+            api_ok = True
+        except Exception:
+            found = []
+    if os.name == "nt" and not api_ok:
         try:
             txt = subprocess.run(["ipconfig"], capture_output=True, errors="ignore", text=True,
                                  timeout=10, creationflags=0x08000000).stdout  # CREATE_NO_WINDOW
@@ -195,6 +203,58 @@ class _RemoteSide(asyncio.DatagramProtocol):
         pass   # ICMP "port unreachable" from a dead DHT node: normal, ignore
 
 
+class _PendingConn:
+    """Stands in for Conn during the few microseconds before the connection is registered."""
+    __slots__ = ("link",)
+
+    def __init__(self, link):
+        self.link = link
+
+    def add(self, n):
+        pass
+
+
+class _Pipe(asyncio.Protocol):
+    """One direction of a relayed connection: whatever arrives is written straight to the other side."""
+    __slots__ = ("link", "conn", "down", "done", "peer", "transport")
+
+    def __init__(self, link, conn, down, done):
+        self.link, self.conn, self.down, self.done = link, conn, down, done
+        self.peer = self.transport = None
+
+    def connection_made(self, transport):
+        self.transport = transport
+
+    def data_received(self, data):
+        n = len(data)
+        if self.down:
+            self.link.down += n
+        else:
+            self.link.up += n
+        self.conn.add(n)
+        self.peer.transport.write(data)
+        if self.link.quota_bytes and self.link.over_quota():
+            self.transport.close()
+            self.peer.transport.close()
+
+    def eof_received(self):
+        return False                      # close this side; connection_lost then closes the other
+
+    def pause_writing(self):              # our outgoing buffer is full: stop reading from the other side
+        if self.peer.transport is not None:
+            self.peer.transport.pause_reading()
+
+    def resume_writing(self):
+        if self.peer.transport is not None:
+            self.peer.transport.resume_reading()
+
+    def connection_lost(self, exc):
+        if self.peer is not None and self.peer.transport is not None:
+            self.peer.transport.close()
+        if not self.done.done():
+            self.done.set_result(None)
+
+
 class BalancingProxy:
     """SOCKS5 (CONNECT only) proxy; each outgoing connection is bound to one link's local IP."""
 
@@ -356,7 +416,7 @@ class BalancingProxy:
 
     # -- SOCKS5 -------------------------------------------------------------- #
     async def _handle(self, reader, writer):
-        remote_w = None
+        remote_t = None
         link = None
         conn = None
         try:
@@ -438,25 +498,41 @@ class BalancingProxy:
                 writer.write(b"\x05\x05\x00\x01\x00\x00\x00\x00\x00\x00")
                 return
 
-            remote_r, remote_w = await asyncio.open_connection(sock=sock)
+            # Data phase: hand both sockets to _Pipe callbacks, which pass data straight through
+            # (much less CPU than awaiting every chunk; flow control via pause/resume_reading).
+            done = loop.create_future()
+            pending = _PendingConn(link)
+            up = _Pipe(link, pending, False, done)          # app -> internet
+            down = _Pipe(link, pending, True, done)         # internet -> app
+            up.peer, down.peer = down, up
+            remote_t, _ = await loop.create_connection(lambda: down, sock=sock)
             writer.write(b"\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00")
+            client_t = writer.transport
+            leftover = bytes(reader._buffer)                # anything the app sent right after its request
+            reader._buffer.clear()
+            client_t.set_protocol(up)
+            up.connection_made(client_t)
+            if not client_t.is_reading():                   # the stream reader may have paused it
+                client_t.resume_reading()
+            for t in (client_t, remote_t):
+                t.set_write_buffer_limits(high=256 * 1024)
             conn = Conn(link, asyncio.current_task())
+            up.conn = down.conn = conn
             self.conns.add(conn)
             link.active += 1
-            await asyncio.gather(
-                self._pump(reader, remote_w, link, "up", conn),
-                self._pump(remote_r, writer, link, "down", conn),
-            )
+            if leftover:
+                up.data_received(leftover)
+            await done
         except (asyncio.IncompleteReadError, ConnectionError, OSError):
             pass
         finally:
             if conn is not None:
                 link.active -= 1
                 self.conns.discard(conn)
-            for w in (writer, remote_w):
-                if w is not None:
+            for t in (writer, remote_t):
+                if t is not None:
                     try:
-                        w.close()
+                        t.close()
                     except Exception:
                         pass
 
@@ -483,27 +559,5 @@ class BalancingProxy:
             self.udp_assocs -= 1
             assoc.close()
 
-    async def _pump(self, r, w, link, direction, conn):
-        try:
-            while True:
-                data = await r.read(65536)
-                if not data:
-                    break
-                conn.add(len(data))
-                if direction == "down":
-                    link.down += len(data)
-                else:
-                    link.up += len(data)
-                w.write(data)
-                await w.drain()
-                if link.over_quota():
-                    break
-        except (ConnectionError, OSError):
-            pass
-        finally:
-            try:
-                w.close()
-            except Exception:
-                pass
 
 

@@ -32,7 +32,7 @@ def test_turns_on_when_hotspot_connects(tmp_path):
         assert not ctl.running
         ad.named["Ethernet 2"] = "127.0.0.2"              # phone plugged in
         assert wait_for(lambda: ctl.running)
-        assert "DualLink turned on" in notes
+        assert wait_for(lambda: "DualLink turned on" in notes)
     finally:
         ctl.shutdown()
 
@@ -188,7 +188,7 @@ def test_update_check(tmp_path):
         r = ctl.check_updates_now(fetch=lambda repo: release)
         assert r["ok"] and r["update"]["version"] == "99.0.0" and r["update"]["installer"].endswith(".exe")
         assert ctl.status()["update"]["version"] == "99.0.0"
-        assert "DualLink 99.0.0 is available" in notes
+        assert wait_for(lambda: "DualLink 99.0.0 is available" in notes)
         r = ctl.check_updates_now(fetch=lambda repo: dict(release, tag_name="v0.1.0"))
         assert r["ok"] and r["update"] is None
     finally:

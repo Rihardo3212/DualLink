@@ -126,6 +126,7 @@ class Controller:
         self._quota_warned = False
         self._sync_links()
         self.app_live = {}                        # live app status (who is connected to DualLink right now)
+        self.ui_visible = True                    # False while the window is hidden in the tray or minimised
         self.app_every = 5.0
         self.app_probe = None                     # override for tests; default: diag.proxy_clients
         threading.Thread(target=self._app_loop, daemon=True).start()
@@ -707,7 +708,9 @@ class Controller:
                 self.notify("Hotspot data limit reached",
                             "DualLink stopped using the hotspot. Downloads continue over Ethernet.")
 
-    def status(self):
+    def status(self, for_ui=False):
+        if for_ui and not self.ui_visible:
+            return {"hidden": True}          # window is in the tray or minimised: nothing to draw
         usable = [l for l in self.links if l.usable()]
         wsum = sum(l.weight for l in usable) or 1.0
         out = []

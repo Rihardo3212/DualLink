@@ -33,7 +33,7 @@ jobs:
         shell: bash
         run: echo "REPO = \"$GITHUB_REPOSITORY\"" > duallink/_build_info.py
 
-      - name: Build DualLink.exe
+      - name: Build DualLink.exe (standalone, one file)
         run: |
           python tools/make_icon.py
           python -m PyInstaller --noconfirm --onefile --windowed --name DualLink --icon build/icon.ico `
@@ -41,6 +41,21 @@ jobs:
             --hidden-import pystray._win32 --hidden-import webview.platforms.winforms --hidden-import webview.platforms.edgechromium `
             --hidden-import duallink._build_info `
             main.py
+
+      - name: Build the installed version (a folder - starts faster, nothing to unpack on each start)
+        run: |
+          python -m PyInstaller --noconfirm --onedir --windowed --name DualLink --icon build/icon.ico `
+            --distpath dist/folder --workpath build/folder `
+            --add-data "duallink/ui;duallink/ui" `
+            --hidden-import pystray._win32 --hidden-import webview.platforms.winforms --hidden-import webview.platforms.edgechromium `
+            --hidden-import duallink._build_info `
+            main.py
+
+      - name: Check the folder build starts
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\folder\DualLink\DualLink.exe -ArgumentList "--cleanup" -PassThru -Wait
+          if ($p.ExitCode -ne 0) { Write-Error "DualLink.exe --cleanup exited with $($p.ExitCode)"; exit 1 }
 
       - name: Build installer
         shell: pwsh
