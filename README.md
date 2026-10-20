@@ -1,7 +1,7 @@
 <p align="center"><img src="docs/icon.png" width="96" alt="DualLink icon"></p>
 
 <h1 align="center">DualLink</h1>
-<p align="center">Download over your <b>Ethernet</b> and your <b>phone hotspot</b> at the same time - in <b>qBittorrent</b> and <b>Free Download Manager</b>.</p>
+<p align="center">Download over your <b>Ethernet</b> and your <b>phone hotspot</b> at the same time - in qBittorrent, Free Download Manager, JDownloader, IDM, Firefox and other apps.</p>
 
 <p align="center"><img src="docs/screenshot.png" width="680" alt="DualLink window showing Ethernet and hotspot speeds combined"></p>
 
@@ -24,6 +24,10 @@ A single torrent or a single file therefore uses both internet connections.
 - **Follows your connections.** Adapters are remembered by name, so if your phone reconnects with a new
   IP, is unplugged, or comes back (even on another USB port), DualLink adapts within seconds. You can turn
   it on before plugging in the phone, and the hotspot joins automatically.
+- **Turns on by itself.** When your phone's hotspot connects, DualLink switches on (optional: also when it starts).
+- **Speed test.** Measures each connection on its own, and DualLink uses the result to favour the faster one.
+- **Remembers which link is faster** between sessions, so balancing is right from the first second.
+- **Update notifications** from this repository's Releases page.
 - **Traffic check.** Shows which programs are connected through DualLink, which ones connect directly
   around it, and how much traffic Windows sees on each connection compared with what DualLink carries.
 - **IPv4 and IPv6.** Apps that hand DualLink an IPv6 address are split over both links too.
@@ -38,11 +42,14 @@ Switch apps on in DualLink's **Apps** card.
 | **qBittorrent** | Automatic. DualLink applies the proxy when you turn it on and restores your settings when you turn it off. Needs qBittorrent's Web UI: press **Set up** next to qBittorrent for the steps and a connection test. |
 | **Free Download Manager** | Press **Set up** next to FDM for the steps. Once: in FDM open **☰ › Settings › Network**, choose manual proxy configuration, type **SOCKS5**, address `127.0.0.1`, port `1080`. Leave it like that. While DualLink is off it passes FDM's downloads through over your normal connection, and when it's on, each file's pieces are spread over both links. Keep DualLink running (tray / Start with Windows); if it's closed, FDM can't download. |
 
-Any other app with SOCKS5 proxy support can use DualLink the same way as FDM.
+**JDownloader, Internet Download Manager, Firefox** and **any other app with a SOCKS5 proxy setting** work the
+same way as FDM - add them with **+ More apps**, which shows the steps for each.
 
 ## Install
 
-1. Download `DualLink.exe` from the [Releases](../../releases) page. No installation or Python needed.
+1. Download **`DualLink-Setup-x.y.z.exe`** from the [Releases](../../releases) page and run it. It installs for your user
+   only (no administrator prompt) with a Start menu entry, an optional desktop shortcut and an uninstaller.
+   Prefer no installation? `DualLink.exe` on the same page runs as-is.
 2. **One-time qBittorrent setup:** in qBittorrent open **Tools › Options › Web UI**, tick
    **Web User Interface (Remote control)** (port 8080), tick
    **Bypass authentication for clients on localhost**, and click OK.
@@ -92,7 +99,8 @@ python main.py            :: run from source
 build.bat                 :: run tests and build dist\DualLink.exe
 ```
 
-Every push to GitHub runs the tests on Windows and builds `DualLink.exe`. You can find it under
+Every push to GitHub runs the tests on Windows and builds `DualLink.exe` and the installer `DualLink-Setup-x.y.z.exe`
+(made with [Inno Setup](https://jrsoftware.org/isinfo.php) from `installer/DualLink.iss`). You can find them under
 **Actions › latest run › Artifacts**. To publish a release, push a tag:
 
 ```bash
@@ -106,6 +114,10 @@ git push origin v1.0.0
 main.py                    entry point
 duallink/engine.py         SOCKS5 proxy + automatic balancing (no dependencies)
 duallink/qbt.py            qBittorrent Web UI setup/restore
+duallink/speedtest.py      per-link speed test
+duallink/updates.py        update check against GitHub Releases
+duallink/diag.py           traffic check (netstat/tasklist/netsh)
+installer/DualLink.iss     Windows installer script
 duallink/controller.py     settings, on/off, statistics, start-with-Windows
 duallink/app.py            window (pywebview) + system tray (pystray)
 duallink/ui/index.html     the interface

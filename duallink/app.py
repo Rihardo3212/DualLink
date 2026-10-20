@@ -65,6 +65,19 @@ class Api:
     def test_qbt(self):
         return self._ctl.test_qbt()
 
+    def start_speed_test(self):
+        return self._ctl.start_speed_test()
+
+    def check_updates(self):
+        return self._ctl.check_updates_now()
+
+    def open_url(self, url):
+        if not str(url).startswith("https://github.com/"):
+            return False                  # only ever open our own release pages
+        import webbrowser
+        webbrowser.open(url)
+        return True
+
     def traffic_check(self):
         return self._ctl.traffic_check()
 
@@ -86,7 +99,7 @@ class DualLinkApp:
         self.tray = None
         self.window = webview.create_window(
             "DualLink", resource("ui", "index.html"), js_api=self.api,
-            width=920, height=660, min_size=(720, 560), hidden=start_minimized,
+            width=920, height=720, min_size=(720, 560), hidden=start_minimized,
             background_color="#0e1015",
         )
         self.window.events.closing += self._on_closing
@@ -178,4 +191,6 @@ class DualLinkApp:
 
     def run(self):
         self._start_tray()
+        threading.Thread(target=self.ctl.startup, daemon=True).start()   # "turn on when DualLink starts"
+        self.ctl.start_update_checks()
         webview.start()

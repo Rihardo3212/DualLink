@@ -75,13 +75,29 @@
   .apps { padding: 6px 18px; }
   .apps h3 { margin: 10px 0 2px; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); font-weight: 600; }
   .app-row { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid var(--line); }
-  .apps h3 + .app-row { border-top: 0; }
+  #appRows .app-row:first-child { border-top: 0; }
   .badge { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; flex: none;
            font-size: 11px; font-weight: 700; color: #fff; background: var(--b); }
   .app-main { flex: 1; min-width: 0; }
   .app-name { font-weight: 600; font-size: 13.5px; }
   .app-status { font-size: 12px; color: var(--muted); }
   .app-status.good { color: var(--on); } .app-status.warn { color: var(--warn); } .app-status.bad { color: var(--bad); }
+
+  .more-row { border-top: 1px solid var(--line); padding: 10px 0 12px; font-size: 13px; }
+  .btn.update { background: color-mix(in srgb, var(--on) 16%, var(--panel)); border-color: color-mix(in srgb, var(--on) 45%, var(--line)); color: var(--on); }
+  .ver-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12.5px; padding: 4px 0 8px; }
+  .pick { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .pick:first-child { border-top: 0; }
+  .pick .app-main small { display: block; color: var(--faint); font-size: 12px; }
+  .sp-row { display: grid; grid-template-columns: 110px 1fr auto; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .sp-row:first-child { border-top: 0; }
+  .sp-bar { height: 10px; border-radius: 99px; background: var(--panel-2); overflow: hidden; border: 1px solid var(--line); }
+  .sp-bar i { display: block; height: 100%; border-radius: 99px; background: var(--c); transition: width .6s; }
+  .sp-val { font-weight: 650; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  .sp-val small { display: block; color: var(--muted); font-weight: 400; font-size: 11.5px; }
+  .sp-err { color: var(--bad); font-size: 12px; }
+  .sp-total { margin-top: 10px; padding: 12px 14px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); font-size: 13px; }
+  .sp-total b { font-size: 18px; }
 
   /* switch */
   .switch { position: relative; width: 38px; height: 22px; flex: none; cursor: pointer; }
@@ -184,6 +200,8 @@
     </svg>
     <div><div class="title">DualLink</div><div class="sub">Ethernet + phone hotspot for faster downloads</div></div>
     <div class="spacer"></div>
+    <button class="btn update hidden" id="updateBtn" title="A newer version of DualLink is available"></button>
+    <button class="btn" id="openSpeed" title="Measure how fast each connection is">Speed test</button>
     <button class="btn" id="openCheck" title="See which programs use DualLink and where your traffic goes">Traffic check</button>
     <button class="icon-btn" id="openSettings" title="Settings" aria-label="Settings">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -218,18 +236,8 @@
 
   <section class="card apps">
     <h3>Apps</h3>
-    <div class="app-row">
-      <div class="badge" style="--b:#3c78d8">qB</div>
-      <div class="app-main"><div class="app-name">qBittorrent</div><div class="app-status" id="qbtStatus"></div></div>
-      <button class="btn small" id="qbtSetup">Set up</button>
-      <label class="switch" title="Use DualLink with qBittorrent"><input type="checkbox" id="app_qbt"><span></span></label>
-    </div>
-    <div class="app-row">
-      <div class="badge" style="--b:#2aa36b">FDM</div>
-      <div class="app-main"><div class="app-name">Free Download Manager</div><div class="app-status" id="fdmStatus"></div></div>
-      <button class="btn small" id="fdmSetup">Set up</button>
-      <label class="switch" title="Use DualLink with Free Download Manager"><input type="checkbox" id="app_fdm"><span></span></label>
-    </div>
+    <div id="appRows"></div>
+    <div class="more-row"><button class="link-btn" id="moreApps">+ More apps</button></div>
   </section>
 </div>
 
@@ -263,10 +271,23 @@
         <div class="hint">0 = no limit. Counted from when you turn DualLink on.</div></div>
     </div>
     <div class="section">
+      <h4>Automation</h4>
+      <label class="toggle"><span>Turn on when the hotspot connects<small>Plug in your phone and DualLink starts combining</small></span>
+        <span class="switch"><input type="checkbox" id="s_auto_on_hotspot"><span></span></span></label>
+      <label class="toggle"><span>Turn on when DualLink starts<small>Combine straight away - handy with Start with Windows</small></span>
+        <span class="switch"><input type="checkbox" id="s_auto_on_start"><span></span></span></label>
+    </div>
+    <div class="section">
       <h4>App</h4>
       <label class="toggle"><span>Keep running in the tray when closed</span><span class="switch"><input type="checkbox" id="s_tray"><span></span></span></label>
       <label class="toggle"><span>Start with Windows</span><span class="switch"><input type="checkbox" id="s_autostart"><span></span></span></label>
       <div class="field"><label for="s_port">Proxy port</label><input type="number" id="s_port" min="1024" max="65535"></div>
+    </div>
+    <div class="section">
+      <h4>Updates</h4>
+      <label class="toggle"><span>Check for updates<small>Looks at the GitHub Releases page twice a day</small></span>
+        <span class="switch"><input type="checkbox" id="s_check_updates"><span></span></span></label>
+      <div class="ver-row"><span class="muted" id="verText">DualLink</span><button class="btn small" id="checkNow">Check now</button></div>
     </div>
   </div>
 </aside>
@@ -367,26 +388,60 @@ function renderTile(el, l, isHot) {
   }
 }
 
-function renderApps(s) {
-  if (!savePending) { $("app_qbt").checked = s.qbt_auto; $("app_fdm").checked = s.fdm; }
-  const st = s.qbt.state;
-  let qt = "Off", qk = "", needsFix = false;
-  if (s.qbt_auto) {
-    if (!running) qt = "Ready - set up automatically when DualLink is on";
-    else if (st === "connected") { qt = "✓ Connected"; qk = "good"; }
-    else if (st === "auth") { qt = "Login needed"; qk = "warn"; needsFix = true; }
-    else { qt = "Can't reach qBittorrent - needs setup"; qk = "warn"; needsFix = true; }
-  }
-  $("qbtStatus").textContent = qt; $("qbtStatus").className = "app-status " + qk;
-  $("qbtSetup").textContent = needsFix ? "Fix" : "Set up"; $("qbtSetup").className = "btn small" + (needsFix ? " warn" : "");
+const APPS = [
+  { key: "qbt", name: "qBittorrent", badge: "qB", color: "#3c78d8", desc: "Torrents - set up automatically" },
+  { key: "fdm", name: "Free Download Manager", badge: "FDM", color: "#2aa36b", desc: "Downloads from websites" },
+  { key: "jd", name: "JDownloader", badge: "JD", color: "#d4972a", desc: "Downloads from file hosts" },
+  { key: "idm", name: "Internet Download Manager", badge: "IDM", color: "#3a8fd6", desc: "Downloads from websites" },
+  { key: "firefox", name: "Firefox", badge: "FF", color: "#e0601a", desc: "Browser downloads and browsing" },
+  { key: "other", name: "Other app", badge: "+", color: "#6b7280", desc: "Any app with a SOCKS5 proxy setting" },
+];
+const settingKey = (key) => (key === "qbt" ? "qbt_auto" : key);
+const appOn = (key) => !!settings[settingKey(key)];
 
-  let ft = "Off", fk = "";
-  if (s.fdm) {
-    if (s.standby_error) { ft = "Proxy port is in use - change it in Settings"; fk = "bad"; }
-    else if (running) { ft = "✓ Active"; fk = "good"; }
-    else ft = "Ready - downloads pass straight through while DualLink is off";
-  }
-  $("fdmStatus").textContent = ft; $("fdmStatus").className = "app-status " + fk;
+function buildApps() {
+  const shown = APPS.filter((a) => a.key === "qbt" || a.key === "fdm" || appOn(a.key));
+  $("appRows").innerHTML = shown.map((a) => `
+    <div class="app-row" data-app="${a.key}">
+      <div class="badge" style="--b:${a.color}">${esc(a.badge)}</div>
+      <div class="app-main"><div class="app-name">${esc(a.name)}</div><div class="app-status" data-k="status"></div></div>
+      <button class="btn small" data-k="setup">Set up</button>
+      <label class="switch" title="Use DualLink with ${esc(a.name)}"><input type="checkbox" data-k="sw"><span></span></label>
+    </div>`).join("");
+  $("appRows").querySelectorAll(".app-row").forEach((row) => {
+    const key = row.dataset.app, sw = row.querySelector('[data-k="sw"]');
+    sw.checked = appOn(key);
+    sw.onchange = () => setApp(key, sw.checked);
+    row.querySelector('[data-k="setup"]').onclick = () => openGuide(key);
+  });
+  if (last) renderApps(last);
+}
+function setApp(key, on) {
+  save({ [settingKey(key)]: on });
+  if (on) openGuide(key);
+  if (!on && key !== "qbt" && key !== "fdm") setTimeout(buildApps, 400);   // extra apps leave the list when switched off
+}
+function renderApps(s) {
+  const st = s.qbt.state;
+  $("appRows").querySelectorAll(".app-row").forEach((row) => {
+    const key = row.dataset.app, sw = row.querySelector('[data-k="sw"]'), btn = row.querySelector('[data-k="setup"]');
+    const on = key === "qbt" ? s.qbt_auto : !!(s.apps || {})[key];
+    if (!savePending) sw.checked = on;
+    let t = "Off", k = "", fix = false;
+    if (key === "qbt" && on) {
+      if (!running) t = "Ready - set up automatically when DualLink is on";
+      else if (st === "connected") { t = "✓ Connected"; k = "good"; }
+      else if (st === "auth") { t = "Login needed"; k = "warn"; fix = true; }
+      else { t = "Can't reach qBittorrent - needs setup"; k = "warn"; fix = true; }
+    } else if (on) {
+      if (s.standby_error) { t = "Proxy port is in use - change it in Settings"; k = "bad"; }
+      else if (running) { t = "✓ Active"; k = "good"; }
+      else t = "Ready - downloads pass straight through while DualLink is off";
+    }
+    const status = row.querySelector('[data-k="status"]');
+    status.textContent = t; status.className = "app-status " + k;
+    btn.textContent = fix ? "Fix" : "Set up"; btn.className = "btn small" + (fix ? " warn" : "");
+  });
 }
 
 function render(s) {
@@ -403,6 +458,10 @@ function render(s) {
   renderApps(s);
   $("restartNote").classList.toggle("hidden", !running);
   if (modalKind === "qbt") refreshQbtSteps();
+  if (modalKind === "speed") renderSpeed(s.speedtest);
+  $("updateBtn").classList.toggle("hidden", !s.update);
+  if (s.update) $("updateBtn").textContent = `Update to ${s.update.version}`;
+  $("verText").textContent = `DualLink ${s.version}`;
 }
 async function poll() {
   try { render(await api.status()); } catch (e) { /* closing */ }
@@ -429,7 +488,8 @@ function fillSettings() {
   $("s_share_eth").value = s.share_eth; $("s_share_hot").value = s.share_hot;
   $("s_quota").value = s.quota_mb; $("s_port").value = s.port;
   $("s_tray").checked = s.tray; $("s_autostart").checked = s.autostart;
-  $("app_qbt").checked = s.qbt_auto; $("app_fdm").checked = s.fdm;
+  $("s_auto_on_hotspot").checked = s.auto_on_hotspot; $("s_auto_on_start").checked = s.auto_on_start;
+  $("s_check_updates").checked = s.check_updates;
   $("manualShares").classList.toggle("hidden", s.auto);
   $("recycleRow").classList.toggle("hidden", !s.auto);
 }
@@ -455,6 +515,7 @@ function bindSettings() {
   $("s_eth").onchange = () => save({ eth_name: $("s_eth").value });
   $("s_hot").onchange = () => save({ hot_name: $("s_hot").value });
   chk("s_auto", "auto"); chk("s_recycle", "recycle"); chk("s_tray", "tray"); chk("s_autostart", "autostart");
+  chk("s_auto_on_hotspot", "auto_on_hotspot"); chk("s_auto_on_start", "auto_on_start"); chk("s_check_updates", "check_updates");
   num("s_share_eth", "share_eth", (v) => parseFloat(v) || 1); num("s_share_hot", "share_hot", (v) => parseFloat(v) || 1);
   num("s_quota", "quota_mb", (v) => parseFloat(v) || 0);
   $("s_port").addEventListener("change", () => save({ port: parseInt($("s_port").value) || 1080 }));   // on finish, not per keystroke
@@ -527,28 +588,102 @@ function refreshQbtSteps() {
   if (ok) ["qStep1", "qStep2", "qStep3"].forEach((id) => $(id) && $(id).classList.add("done"));
 }
 
-function openFdmSetup() {
-  openModal("fdm", "Set up Free Download Manager", `
+function socksLine(label = "SOCKS5") {
+  return `${label}: <code>127.0.0.1</code> ${copyBtn("127.0.0.1")} &nbsp;port <code>${esc(settings.port)}</code> ${copyBtn(String(settings.port))}`;
+}
+const GUIDES = {
+  fdm: () => ({ where: "In FDM: <b>☰ › Settings › Network</b>, under Proxy",
+    items: ["Choose <b>Configure manually</b>", socksLine("SOCKS5"), "Leave HTTP, HTTPS and FTP empty"],
+    conn: ["In FDM: <b>Settings › Traffic Limits</b>", "Set <b>Maximum number of connections per server</b> to 8 or more for the mode you use (Low / Medium / High, shown at the bottom of FDM)"],
+    tip: "Some sites, like MediaFire, only accept one IP address per download link - those files can only use one connection." }),
+  jd: () => ({ where: "In JDownloader: <b>Settings › Connection Manager</b>",
+    items: ["Click <b>Add</b> and choose <b>Socks5</b>", socksLine("Host"), "Untick <b>No Proxy</b> in the list, so every download goes through DualLink"],
+    conn: ["In JDownloader: <b>Settings › General</b>", "Set <b>Max. Chunks per Download</b> to 8 or more"],
+    tip: "Menu names can differ slightly between JDownloader versions. Some file hosts only allow one connection per file." }),
+  idm: () => ({ where: "In IDM: <b>Downloads › Options › Proxy / Socks</b>",
+    items: ["Tick <b>Use Socks</b> and choose <b>Socks 5</b>", socksLine("Address"), "Leave <b>Use proxy</b> (HTTP) unticked"],
+    conn: ["In IDM: <b>Downloads › Options › Connection</b>", "Set <b>Default max. conn. number</b> to 8 or more"],
+    tip: "Menu names can differ slightly between IDM versions." }),
+  firefox: () => ({ where: "In Firefox: <b>Settings › General › Network Settings › Settings…</b>",
+    items: ["Choose <b>Manual proxy configuration</b>", socksLine("SOCKS Host"), "Choose <b>SOCKS v5</b> and tick <b>Proxy DNS when using SOCKS v5</b>", "Leave HTTP Proxy empty"],
+    conn: null,
+    tip: "Browsers usually download each file over one connection, so the speed-up comes from several downloads at once. All of Firefox's browsing goes through DualLink too." }),
+  other: () => ({ where: "In your app's settings, look for the proxy options (often under Network or Connection)",
+    items: ["Choose <b>SOCKS5</b> (sometimes called SOCKS v5)", socksLine("Address"), "If there's an option like <b>remote DNS</b> or <b>Proxy DNS</b>, turn it on", "Leave HTTP and HTTPS proxy fields empty"],
+    conn: ["If the app can download a file in parts", "Allow several connections per file (8 or more)"],
+    tip: "Apps without a SOCKS5 setting (most games and launchers) can't use DualLink." }),
+};
+function openGuide(key) {
+  if (key === "qbt") return openQbtSetup();
+  const app = APPS.find((a) => a.key === key), g = GUIDES[key]();
+  openModal(key, `Set up ${app.name}`, `
     <ol class="steps">
-      <li><div class="s-title">Point FDM at DualLink <span class="muted">(one time)</span></div>
-        <div class="s-where">In FDM: <b>☰ › Settings › Network</b>, under Proxy</div>
-        <ul>
-          <li>Choose <b>Configure manually</b></li>
-          <li>SOCKS5: <code>127.0.0.1</code> ${copyBtn("127.0.0.1")} &nbsp;port <code>${esc(settings.port)}</code> ${copyBtn(String(settings.port))}</li>
-          <li>Leave HTTP, HTTPS and FTP empty</li>
-        </ul></li>
-      <li><div class="s-title">Allow several connections per file</div>
-        <div class="s-where">In FDM: <b>Settings › Traffic Limits</b></div>
-        <ul><li>Set <b>Maximum number of connections per server</b> to 8 or more for the mode you use
-          (Low / Medium / High, shown at the bottom of FDM)</li></ul></li>
+      <li><div class="s-title">Point ${esc(app.name)} at DualLink <span class="muted">(one time)</span></div>
+        <div class="s-where">${g.where}</div><ul>${g.items.map((x) => `<li>${x}</li>`).join("")}</ul></li>
+      ${g.conn ? `<li><div class="s-title">Allow several connections per file</div><div class="s-where">${g.conn[0]}</div><ul><li>${g.conn[1]}</li></ul></li>` : ""}
       <li><div class="s-title">Keep DualLink running</div>
-        <div class="s-where">While DualLink is off, FDM's downloads pass straight through. If DualLink is closed, FDM can't download.</div>
-        ${settings.autostart ? "" : `<button class="btn small" id="fAuto">Start DualLink with Windows</button>`}</li>
+        <div class="s-where">While DualLink is off, the app's downloads pass straight through. If DualLink is closed, the app can't download.</div>
+        ${settings.autostart ? "" : `<button class="btn small" id="gAuto">Start DualLink with Windows</button>`}</li>
     </ol>
-    <p class="tip">Some sites, like MediaFire, only accept one IP address per download link - those files can only use one connection.</p>`,
-    `<span class="muted">Use <b>Traffic check</b> during a download to confirm.</span><button class="btn" id="fDone">Done</button>`);
-  $("fDone").onclick = closeModal;
-  if ($("fAuto")) $("fAuto").onclick = async () => { await saveNow({ autostart: true }); $("s_autostart").checked = true; $("fAuto").remove(); toast("DualLink will start with Windows"); };
+    <p class="tip">${g.tip}</p>`,
+    `<span class="muted">Use <b>Traffic check</b> during a download to confirm.</span><button class="btn" id="gDone">Done</button>`);
+  $("gDone").onclick = closeModal;
+  if ($("gAuto")) $("gAuto").onclick = async () => { await saveNow({ autostart: true }); $("s_autostart").checked = true; $("gAuto").remove(); toast("DualLink will start with Windows"); };
+}
+function openMoreApps() {
+  const extra = APPS.filter((a) => a.key !== "qbt");
+  openModal("more", "Apps that can use DualLink", extra.map((a) => `
+    <div class="pick"><div class="badge" style="--b:${a.color}">${esc(a.badge)}</div>
+      <div class="app-main"><div class="app-name">${esc(a.name)}</div><small>${esc(a.desc)}</small></div>
+      <button class="btn small ${appOn(a.key) ? "" : "primary"}" data-pick="${a.key}">${appOn(a.key) ? "Set up" : "Add"}</button></div>`).join(""),
+    `<span class="muted">Any app with a SOCKS5 proxy setting works.</span><button class="btn" id="pDone">Done</button>`);
+  $("pDone").onclick = closeModal;
+  $("mBody").querySelectorAll("[data-pick]").forEach((b) => (b.onclick = async () => {
+    const key = b.dataset.pick;
+    if (!appOn(key)) { await saveNow({ [settingKey(key)]: true }); buildApps(); }
+    openGuide(key);
+  }));
+}
+
+// ---------- speed test ----------
+let spSig = "";
+function openSpeedTest() {
+  spSig = "";
+  openModal("speed", "Speed test", "", `<span class="muted" id="spFoot"></span><button class="btn primary" id="spStart">Start test</button>`);
+  $("spStart").onclick = async () => {
+    const r = await api.start_speed_test();
+    if (!r.ok) toast(r.message, true); else renderSpeed({ running: true, phase: "" });
+  };
+  renderSpeed(last ? last.speedtest : null);
+}
+const mbps = (bps) => (bps * 8 / 1e6);
+function renderSpeed(st) {
+  if (modalKind !== "speed") return;
+  const sig = JSON.stringify(st); if (sig === spSig) return; spSig = sig;
+  const res = st && st.result;
+  if (st && st.running) {
+    $("mBody").innerHTML = `<p style="color:var(--muted)"><span class="spinner"></span>Testing ${esc(st.phase || "")}… about 10 seconds in total.</p>`;
+    $("spStart").disabled = true; $("spFoot").textContent = ""; return;
+  }
+  $("spStart").disabled = false;
+  let h = `<p class="tip" style="margin:4px 0 10px;color:var(--muted)">Measures how fast each connection can download on its own, one after the other.
+    For accurate results, pause big downloads first. The hotspot part uses a few dozen MB of mobile data.</p>`;
+  if (res) {
+    const rows = [["Ethernet", "var(--eth)", res.eth], ["Hotspot", "var(--hot)", res.hot]];
+    const max = Math.max(1, ...rows.map((r) => (r[2] && r[2].bps) || 0));
+    h += rows.map(([label, color, r]) => {
+      const bps = (r && r.bps) || 0, err = r && r.error;
+      return `<div class="sp-row" style="--c:${color}"><b>${label}</b>
+        <div class="sp-bar"><i style="width:${(100 * bps) / max}%"></i></div>
+        <div class="sp-val">${err ? `<span class="sp-err">${esc(err)}</span>` : `${mbps(bps).toFixed(0)} Mbps<small>${speedStr(bps)}</small>`}</div></div>`;
+    }).join("");
+    const total = ((res.eth && res.eth.bps) || 0) + ((res.hot && res.hot.bps) || 0);
+    h += `<div class="sp-total">Together: up to <b>${mbps(total).toFixed(0)} Mbps</b> <span class="muted">(${speedStr(total)})</span><br>
+      <span class="muted">DualLink uses these results to favour the faster connection from the start.</span></div>`;
+    $("spFoot").textContent = `Tested ${new Date(res.ts * 1000).toLocaleString()}`;
+    $("spStart").textContent = "Test again";
+  }
+  $("mBody").innerHTML = h;
 }
 
 async function openTrafficCheck() {
@@ -589,10 +724,19 @@ async function init() {
   $("mClose").onclick = $("mScrim").onclick = closeModal;
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") { openSettings(false); closeModal(); } });
   $("refreshAdapters").onclick = async () => { const r = await api.refresh_adapters(); settings = r.settings; fillAdapters(r.adapters); toast("Connection list refreshed"); };
-  $("qbtSetup").onclick = openQbtSetup;
-  $("fdmSetup").onclick = openFdmSetup;
-  $("app_qbt").onchange = () => { save({ qbt_auto: $("app_qbt").checked }); if ($("app_qbt").checked) openQbtSetup(); };
-  $("app_fdm").onchange = () => { save({ fdm: $("app_fdm").checked }); if ($("app_fdm").checked) openFdmSetup(); };
+  buildApps();
+  $("moreApps").onclick = openMoreApps;
+  $("openSpeed").onclick = openSpeedTest;
+  $("updateBtn").onclick = async () => {
+    const u = last && last.update; if (!u) return;
+    await api.open_url(u.installer || u.url);
+    toast(u.installer ? `Downloading the DualLink ${u.version} installer…` : `Opening the DualLink ${u.version} download page…`);
+  };
+  $("checkNow").onclick = async () => {
+    $("checkNow").disabled = true;
+    const r = await api.check_updates(); $("checkNow").disabled = false;
+    if (!r.ok) toast(r.message, true); else toast(r.update ? `DualLink ${r.update.version} is available` : "You have the latest version");
+  };
   $("power").onclick = async () => {
     const p = $("power"); p.classList.add("busy");
     try {

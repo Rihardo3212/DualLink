@@ -10,6 +10,7 @@ import threading
 import time
 from collections import deque
 
+from . import __version__
 from .engine import BalancingProxy, Link, list_adapters, looks_like_hotspot
 from .qbt import QbtError, QbtWebUI
 
@@ -31,8 +32,19 @@ DEFAULTS = {
     "tray": True, "autostart": False,
     "qbt_saved": None,     # original qBittorrent settings while DualLink is on (crash recovery)
     "tray_hint_shown": False,
-    "fdm": False,          # Free Download Manager stays pointed at the proxy -> keep it up in pass-through when off
+    # Apps set up by hand (they stay pointed at the proxy) -> keep it up in pass-through mode while DualLink is off
+    "fdm": False, "jd": False, "idm": False, "firefox": False, "other": False,
+    "auto_on_hotspot": True,   # turn on when the hotspot connects
+    "auto_on_start": False,    # turn on when DualLink starts
+    "check_updates": True,
+    "learned": {},             # adapter name -> {"per_conn": bytes/s per connection, "ts": epoch} (internal)
+    "speedtest": None,         # last speed test result (internal)
 }
+
+
+MANUAL_APPS = ("fdm", "jd", "idm", "firefox", "other")
+INTERNAL_KEYS = ("qbt_saved", "learned", "speedtest")
+LEARNED_MAX_AGE = 30 * 24 * 3600     # forget remembered speeds after 30 days
 
 
 def fmt_rate(b):
@@ -95,6 +107,13 @@ class Controller:
         self._sampler.start()
         threading.Thread(target=self._watch_loop, daemon=True).start()
         self.standby_error = None
+        self._hot_present = None                  # for "turn on when the hotspot connects"
+        self._last_learn = time.monotonic()
+        self.update = None                        # {"version", "url", "installer"} when a newer release exists
+        self._update_notified = None
+        self.speedtest_url = None                 # override for tests
+        self.speedtest_seconds = 5.0
+        self.speedtest_state = {"running": False, "phase": "", "result": self.cfg.get("speedtest")}
         self.ensure_standby()
         if self.cfg.get("qbt_saved"):   # DualLink was not shut down cleanly last time
             threading.Thread(target=self._restore_leftover, daemon=True).start()
@@ -113,10 +132,13 @@ class Controller:
             pass
 
     def public_settings(self):
-        return {k: v for k, v in self.cfg.items() if k not in ("qbt_saved",)}
+        return {k: v for k, v in self.cfg.items() if k not in INTERNAL_KEYS}
+
+    def manual_apps_on(self):
+        return any(self.cfg.get(k) for k in MANUAL_APPS)
 
     def update_settings(self, new):
-        allowed = set(DEFAULTS) - {"qbt_saved"}
+        allowed = set(DEFAULTS) - set(INTERNAL_KEYS)
         new = dict(new or {})
         eth = new.get("eth_name", self.cfg["eth_name"])
         hot = new.get("hot_name", self.cfg["hot_name"])
@@ -133,7 +155,7 @@ class Controller:
                 self.cfg[k] = max(0.1, float(self.cfg.get(k) or 1))
             self.save()
             self._apply_live_settings()
-        if "fdm" in new or "port" in new:
+        if "port" in new or any(k in new for k in MANUAL_APPS):
             self.ensure_standby()
         if self.running and ("eth_name" in new or "hot_name" in new):
             self.check_adapters()          # switch connections right away
@@ -254,6 +276,7 @@ class Controller:
                 l.measured_at = -1e9
                 l.weight = 1.0
                 l.enabled = True
+            self._seed_speeds()
             self._apply_live_settings()
             self.proxy.moved = 0
             self.proxy.refused_ipv6 = self.proxy.failed = 0
@@ -280,6 +303,129 @@ class Controller:
         self.on_change()
         return {"ok": True, "message": note} if note else {"ok": True}
 
+    # ---- remembered speeds ------------------------------------------------------ #
+    def remember_speeds(self):
+        """Store each link's measured speed per connection, so the next session starts with it."""
+        now_m, changed = time.monotonic(), False
+        learned = dict(self.cfg.get("learned") or {})
+        for key, l in (("eth", self.links[0]), ("hot", self.links[1])):
+            name = self.cfg[f"{key}_name"]
+            if name and l.per_conn > 0 and now_m - l.measured_at < 60:
+                learned[name] = {"per_conn": l.per_conn, "ts": time.time()}
+                changed = True
+        if changed:
+            self.cfg["learned"] = learned
+            self.save()
+
+    def _seed_values(self):
+        """[eth, hot] speeds to start balancing with (remembered or from the last speed test), or None."""
+        now, names = time.time(), (self.cfg["eth_name"], self.cfg["hot_name"])
+        learned = self.cfg.get("learned") or {}
+        vals = [learned.get(n) for n in names]
+        if all(v and now - v.get("ts", 0) < LEARNED_MAX_AGE and v.get("per_conn", 0) > 0 for v in vals):
+            return [v["per_conn"] for v in vals]
+        st = self.cfg.get("speedtest") or {}
+        if now - st.get("ts", 0) < LEARNED_MAX_AGE and st.get("eth_name") == names[0] and st.get("hot_name") == names[1]:
+            vals = [(st.get("eth") or {}).get("bps", 0), (st.get("hot") or {}).get("bps", 0)]
+            if all(v > 0 for v in vals):
+                return vals
+        return None
+
+    def _seed_speeds(self):
+        seeds = self._seed_values()
+        if not seeds:
+            return
+        now_m, total = time.monotonic(), sum(seeds)
+        for l, v in zip(self.links, seeds):
+            l.per_conn = float(v)
+            l.measured_at = now_m                 # counts as measured: no even-split warm-up needed
+            share = v / total
+            l.weight = min(max(share, self.proxy.min_share), 1 - self.proxy.min_share)
+
+    # ---- speed test ------------------------------------------------------------ #
+    def start_speed_test(self):
+        if self.speedtest_state["running"]:
+            return {"ok": True}
+        items = self._scan()
+        names = (self.cfg["eth_name"], self.cfg["hot_name"])
+        ips = [self._ip_of(items, n) for n in names]
+        if not any(ips):
+            return {"ok": False, "message": "Neither connection is available right now."}
+        self.speedtest_state = {"running": True, "phase": "", "result": None}
+        threading.Thread(target=self._run_speed_test, args=(names, ips), daemon=True).start()
+        return {"ok": True}
+
+    def _run_speed_test(self, names, ips):
+        from . import speedtest
+        result = {"ts": time.time(), "eth_name": names[0], "hot_name": names[1]}
+        for key, label, ip in (("eth", "Ethernet", ips[0]), ("hot", "Hotspot", ips[1])):
+            self.speedtest_state["phase"] = label
+            if not ip:
+                result[key] = {"bps": 0, "error": f"{label} isn't connected."}
+                continue
+            kw = {"seconds": self.speedtest_seconds}
+            if self.speedtest_url:
+                kw["url"] = self.speedtest_url
+            try:
+                result[key] = speedtest.measure(ip, **kw)
+            except Exception as e:  # noqa: BLE001
+                result[key] = {"bps": 0, "error": str(e)}
+        self.cfg["speedtest"] = result
+        self.save()
+        if self.running and all(time.monotonic() - l.measured_at > 60 for l in self.links):
+            self._seed_speeds()                   # nothing measured yet this session: use the test right away
+        self.speedtest_state = {"running": False, "phase": "", "result": result}
+
+    # ---- updates ------------------------------------------------------------- #
+    def check_updates_now(self, fetch=None):
+        from . import updates
+        if not updates.REPO and fetch is None:
+            return {"ok": False, "message": "Update checks work in the version built by GitHub."}
+        try:
+            kw = {"fetch": fetch} if fetch else {}
+            self.update = updates.check(repo=updates.REPO or "test/test", **kw)
+        except Exception:
+            return {"ok": False, "message": "Couldn't reach GitHub to check for updates."}
+        if self.update and self._update_notified != self.update["version"]:
+            self._update_notified = self.update["version"]
+            self.notify(f"DualLink {self.update['version']} is available", "Open DualLink to download it.")
+        return {"ok": True, "update": self.update}
+
+    def start_update_checks(self, first_delay=10, every=12 * 3600):
+        def loop():
+            time.sleep(first_delay)
+            while True:
+                if self.cfg.get("check_updates"):
+                    self.check_updates_now()
+                time.sleep(every)
+        threading.Thread(target=loop, daemon=True).start()
+
+    # ---- turning on automatically ------------------------------------------------ #
+    def startup(self):
+        """Called once when the app starts."""
+        if self.cfg.get("auto_on_start") and self.cfg["eth_name"] and self.cfg["hot_name"] and not self.running:
+            return self.power_on()
+        return {"ok": True}
+
+    def check_auto_on(self):
+        """While off: turn on when the hotspot appears (not if it was already there - the user turned us off)."""
+        hot = self.cfg["hot_name"]
+        if not (hot and self.cfg["eth_name"]):
+            return
+        items = self._scan()
+        present = bool(self._ip_of(items, hot))
+        if not present:      # the phone may come back as a differently-named adapter
+            cand = next((a for a in items if a["ip"].startswith(PHONE_RANGES) and a["name"] != self.cfg["eth_name"]), None)
+            if cand and self._hot_present is False:
+                self.cfg["hot_name"] = cand["name"]
+                self.save()
+                present = True
+        before, self._hot_present = self._hot_present, present
+        if before is False and present and not self.running and self.cfg.get("auto_on_hotspot"):
+            r = self.power_on()
+            if r.get("ok"):
+                self.notify("DualLink turned on", "Your hotspot connected, so DualLink is combining it with Ethernet.")
+
     # ---- pass-through standby (for apps that stay pointed at the proxy) ----- #
     def proxy_up(self):
         return bool(self.proxy.loop and self.proxy.loop.is_running())
@@ -289,7 +435,7 @@ class Controller:
         with self._lock:
             if self.running:
                 return
-            want = bool(self.cfg.get("fdm"))
+            want = self.manual_apps_on()
             if self.proxy_up() and (not want or (self.cfg["port"] and self.proxy.port != self.cfg["port"])):
                 self.proxy.stop()
             if want and not self.proxy_up():
@@ -317,6 +463,7 @@ class Controller:
         with self._lock:
             if not self.running:
                 return {"ok": True}
+            self.remember_speeds()
             self.running = False
         if self.cfg.get("qbt_saved"):
             try:
@@ -328,8 +475,8 @@ class Controller:
                     q.reconnect(q.downloading_hashes())
             except QbtError:
                 pass  # will be retried at next start
-        if self.cfg.get("fdm"):
-            self.proxy.passthrough = True      # Free Download Manager keeps working over the normal route
+        if self.manual_apps_on():
+            self.proxy.passthrough = True      # apps set up by hand keep working over the normal route
         else:
             self.proxy.stop()
         self.qbt_state = {"state": "off", "message": ""}
@@ -346,10 +493,13 @@ class Controller:
         last = 0.0
         while True:
             time.sleep(0.1)
-            if self.running and time.monotonic() - last >= self.watch_every:
+            if time.monotonic() - last >= self.watch_every:
                 last = time.monotonic()
                 try:
-                    self.check_adapters()
+                    if self.running:
+                        self.check_adapters()
+                    elif self.cfg.get("auto_on_hotspot"):
+                        self.check_auto_on()
                 except Exception:
                     pass
 
@@ -387,6 +537,7 @@ class Controller:
             if ip:
                 self.cfg[f"{key}_ip"] = ip
             changed = True
+        self._hot_present = bool(self.links[1].ip)
         if changed:
             self.save()
             self.on_change()
@@ -402,6 +553,9 @@ class Controller:
                 self._last[i] = (l.down, now)
                 self._speed[i] = sp
                 self._hist[i].append(sp)
+            if self.running and time.monotonic() - self._last_learn > 60:
+                self._last_learn = time.monotonic()
+                self.remember_speeds()
             hot = self.links[1]
             if self.running and hot.over_quota() and not self._quota_warned:
                 self._quota_warned = True
@@ -432,6 +586,10 @@ class Controller:
             "qbt": self.qbt_state,
             "auto": bool(self.cfg["auto"]),
             "fdm": bool(self.cfg.get("fdm")),
+            "apps": {k: bool(self.cfg.get(k)) for k in MANUAL_APPS},
+            "speedtest": self.speedtest_state,
+            "update": self.update,
+            "version": __version__,
             "qbt_auto": bool(self.cfg.get("qbt_auto")),
             "standby": (not self.running) and self.proxy_up(),
             "standby_error": self.standby_error,
@@ -500,6 +658,27 @@ class Controller:
     def shutdown(self):
         self.power_off()
         self.proxy.stop()      # quitting the app: nothing left to pass through
+
+
+# ---- Uninstall clean-up ------------------------------------------------------ #
+def cleanup(cfg_path=None):
+    """Run by the uninstaller: give qBittorrent its own settings back and remove 'Start with Windows'."""
+    path = pathlib.Path(cfg_path) if cfg_path else config_dir() / "config.json"
+    try:
+        cfg = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        cfg = {}
+    if cfg.get("qbt_saved"):
+        try:
+            QbtWebUI(cfg.get("qbt_url", DEFAULTS["qbt_url"]), cfg.get("qbt_user", ""), cfg.get("qbt_pass", "")).restore(cfg["qbt_saved"])
+            cfg["qbt_saved"] = None
+            path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+    try:
+        set_autostart(False)
+    except Exception:
+        pass
 
 
 # ---- Start with Windows ---------------------------------------------------- #
