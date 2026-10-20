@@ -3,7 +3,7 @@
 <h1 align="center">DualLink</h1>
 <p align="center">Download over your <b>Ethernet</b> and your <b>phone hotspot</b> at the same time - in <b>qBittorrent</b> and <b>Free Download Manager</b>.</p>
 
-<p align="center"><img src="docs/screenshot.png" width="760" alt="DualLink window showing Ethernet and hotspot speeds combined"></p>
+<p align="center"><img src="docs/screenshot.png" width="680" alt="DualLink window showing Ethernet and hotspot speeds combined"></p>
 
 ## How it works
 
@@ -35,8 +35,8 @@ Switch apps on in DualLink's **Apps** card.
 
 | App | Setup |
 |---|---|
-| **qBittorrent** | Automatic. DualLink applies the proxy when you turn it on and restores your settings when you turn it off. Needs qBittorrent's Web UI (see below). |
-| **Free Download Manager** | Once: in FDM open **☰ › Settings › Network**, choose manual proxy configuration, type **SOCKS5**, address `127.0.0.1`, port `1080`. Leave it like that. While DualLink is off it passes FDM's downloads through over your normal connection, and when it's on, each file's pieces are spread over both links. Keep DualLink running (tray / Start with Windows); if it's closed, FDM can't download. |
+| **qBittorrent** | Automatic. DualLink applies the proxy when you turn it on and restores your settings when you turn it off. Needs qBittorrent's Web UI: press **Set up** next to qBittorrent for the steps and a connection test. |
+| **Free Download Manager** | Press **Set up** next to FDM for the steps. Once: in FDM open **☰ › Settings › Network**, choose manual proxy configuration, type **SOCKS5**, address `127.0.0.1`, port `1080`. Leave it like that. While DualLink is off it passes FDM's downloads through over your normal connection, and when it's on, each file's pieces are spread over both links. Keep DualLink running (tray / Start with Windows); if it's closed, FDM can't download. |
 
 Any other app with SOCKS5 proxy support can use DualLink the same way as FDM.
 

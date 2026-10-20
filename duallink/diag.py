@@ -120,6 +120,8 @@ def summarize(rows, names, adapters, proxy_port, own_pid):
             ip_to_adapter[ip] = adapter
     through, direct = {}, {}
     for lip, lport, rip, rport, pid in rows:
+        if pid in (0, 4):          # "System Idle Process"/"System": closed connections waiting to expire
+            continue
         prog = names.get(pid, f"PID {pid}")
         if rip in ("127.0.0.1", "::1") and rport == str(proxy_port) and pid != own_pid:
             through[prog] = through.get(prog, 0) + 1

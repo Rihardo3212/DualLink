@@ -86,7 +86,7 @@ class DualLinkApp:
         self.tray = None
         self.window = webview.create_window(
             "DualLink", resource("ui", "index.html"), js_api=self.api,
-            width=1000, height=860, min_size=(760, 640), hidden=start_minimized,
+            width=920, height=660, min_size=(720, 560), hidden=start_minimized,
             background_color="#0e1015",
         )
         self.window.events.closing += self._on_closing

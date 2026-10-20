@@ -14,189 +14,162 @@
   @media (prefers-color-scheme: light) {
     :root {
       --bg: #f3f5f9; --panel: #ffffff; --panel-2: #f6f7fa; --line: #e3e6ee;
-      --text: #161a23; --muted: #5e6678; --faint: #9aa1b0;
+      --text: #161a23; --muted: #5e6678; --faint: #9aa1b0; --warn: #b8740a; --on: #16a35a;
       --shadow: 0 1px 2px rgba(20,30,60,.06), 0 8px 24px rgba(20,30,60,.06);
     }
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
-  body {
-    background: var(--bg); color: var(--text);
-    font: 14px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
-    -webkit-font-smoothing: antialiased; user-select: none; overflow: hidden;
-  }
+  body { background: var(--bg); color: var(--text); overflow: hidden; user-select: none;
+         font: 14px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
   button { font: inherit; color: inherit; }
-  .app { height: 100%; display: flex; flex-direction: column; padding: 18px 22px 16px; gap: 14px; overflow: auto; }
+  .hidden { display: none !important; }
+  .app { height: 100%; overflow: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
+  .muted { color: var(--faint); }
 
   /* header */
   header { display: flex; align-items: center; gap: 12px; }
-  header .title { font-weight: 650; font-size: 17px; letter-spacing: .2px; }
+  header .title { font-weight: 650; font-size: 17px; }
   header .sub { color: var(--muted); font-size: 12.5px; }
   header .spacer { flex: 1; }
-  .icon-btn {
-    width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line);
-    background: var(--panel); display: grid; place-items: center; cursor: pointer; color: var(--muted);
-  }
+  .icon-btn { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel);
+              display: grid; place-items: center; cursor: pointer; color: var(--muted); flex: none; }
   .icon-btn:hover { color: var(--text); border-color: var(--faint); }
+  .btn { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 7px 13px; cursor: pointer; font-size: 13px; }
+  .btn:hover { border-color: var(--faint); }
+  .btn.primary { background: var(--eth); border-color: var(--eth); color: #fff; }
+  .btn.small { padding: 4px 11px; font-size: 12.5px; border-radius: 8px; }
+  .btn.warn { background: var(--warn); border-color: var(--warn); color: #1b1600; }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .link-btn { background: none; border: 0; padding: 0; color: var(--eth); cursor: pointer; font-size: inherit; }
 
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
-
-  /* hero */
-  .hero { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 22px; padding: 20px 24px; }
-  .power {
-    width: 92px; height: 92px; border-radius: 50%; cursor: pointer; position: relative;
-    border: 2px solid var(--line); background: var(--panel-2); color: var(--faint);
-    display: grid; place-items: center; transition: all .25s ease;
-  }
+  /* main card */
+  .main { padding: 20px 22px 16px; }
+  .top { display: flex; align-items: center; gap: 20px; }
+  .power { width: 84px; height: 84px; border-radius: 50%; cursor: pointer; flex: none; border: 2px solid var(--line);
+           background: var(--panel-2); color: var(--faint); display: grid; place-items: center; transition: .25s; }
   .power:hover { border-color: var(--faint); color: var(--muted); }
   .power.on { border-color: var(--on); color: var(--on); background: color-mix(in srgb, var(--on) 10%, var(--panel-2));
               box-shadow: 0 0 0 6px color-mix(in srgb, var(--on) 10%, transparent); }
   .power.busy { opacity: .6; pointer-events: none; }
-  .power svg { width: 38px; height: 38px; }
-  .state-label { font-size: 13px; color: var(--muted); margin-bottom: 2px; }
-  .state-label b { color: var(--text); font-weight: 600; }
-  .speed-big { font-size: 44px; font-weight: 650; letter-spacing: -1px; line-height: 1.05; font-variant-numeric: tabular-nums; }
-  .speed-big small { font-size: 18px; font-weight: 500; color: var(--muted); letter-spacing: 0; margin-left: 4px; }
-  .split { display: flex; gap: 14px; margin-top: 6px; color: var(--muted); font-size: 12.5px; }
-  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
-  .chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 999px;
-          background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); font-size: 12.5px; white-space: nowrap; }
-  .chip.good { color: var(--on); border-color: color-mix(in srgb, var(--on) 35%, var(--line)); }
-  .chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+  .power svg { width: 34px; height: 34px; }
+  .state { font-size: 13px; color: var(--muted); }
+  .state b { color: var(--text); font-weight: 600; }
+  .speed { font-size: 42px; font-weight: 650; letter-spacing: -1px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .speed small { font-size: 17px; font-weight: 500; color: var(--muted); letter-spacing: 0; margin-left: 4px; }
+  canvas { width: 100%; height: 110px; display: block; margin-top: 14px; }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .tile { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 12px; background: var(--panel-2);
+          border: 1px solid var(--line); min-width: 0; }
+  .tile .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
+  .tile .t-main { flex: 1; min-width: 0; }
+  .tile .t-name { font-weight: 600; font-size: 13.5px; }
+  .tile .t-sub { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .t-speed { font-weight: 650; font-size: 18px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tile.waiting { opacity: .6; }
+  .tile .bar { height: 4px; border-radius: 99px; background: var(--line); overflow: hidden; margin-top: 5px; }
+  .tile .bar i { display: block; height: 100%; background: var(--warn); }
 
   /* apps */
-  .apps { padding: 12px 18px 8px; }
-  .apps-head { display: flex; align-items: baseline; gap: 10px; font-size: 13px; margin-bottom: 4px; }
-  .apps-head span { color: var(--faint); font-size: 12px; }
-  .app-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); }
-  .apps-head + .app-row { border-top: 0; }
-  .app-badge { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; flex: none;
-               font-size: 11px; font-weight: 700; color: #fff; background: var(--b); letter-spacing: .3px; }
-  .app-text { flex: 1; min-width: 0; }
+  .apps { padding: 6px 18px; }
+  .apps h3 { margin: 10px 0 2px; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); font-weight: 600; }
+  .app-row { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid var(--line); }
+  .apps h3 + .app-row { border-top: 0; }
+  .badge { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; flex: none;
+           font-size: 11px; font-weight: 700; color: #fff; background: var(--b); }
+  .app-main { flex: 1; min-width: 0; }
   .app-name { font-weight: 600; font-size: 13.5px; }
-  .app-desc { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .chip.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 35%, var(--line)); }
-  .steps { margin: 2px 0 8px 46px; padding: 10px 14px; border-radius: 11px; background: var(--panel-2); border: 1px solid var(--line);
-           font-size: 12.5px; color: var(--muted); }
-  .steps p { margin: 0 0 4px; } .steps ol { margin: 4px 0 6px; padding-left: 18px; } .steps li { margin: 3px 0; }
-  .steps b { color: var(--text); font-weight: 600; }
-  .steps code { color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px;
-                font: 12px ui-monospace, "Cascadia Mono", Consolas, monospace; user-select: text; }
-  .copy { border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 6px; padding: 1px 8px;
-          font-size: 11.5px; cursor: pointer; margin-left: 4px; }
-  .copy:hover { color: var(--text); border-color: var(--faint); }
-  .muted { color: var(--faint); }
+  .app-status { font-size: 12px; color: var(--muted); }
+  .app-status.good { color: var(--on); } .app-status.warn { color: var(--warn); } .app-status.bad { color: var(--bad); }
 
-  /* chart */
-  .chart-card { padding: 14px 18px 10px; }
-  .chart-head { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 12.5px; margin-bottom: 6px; }
-  .legend span { margin-left: 14px; }
-  canvas { width: 100%; height: 130px; display: block; }
-
-  /* link cards */
-  .links { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .link { padding: 16px 18px; position: relative; overflow: hidden; }
-  .link::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--c); }
-  .link-head { display: flex; align-items: center; gap: 10px; }
-  .link-icon { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center;
-               background: color-mix(in srgb, var(--c) 14%, transparent); color: var(--c); }
-  .link-name { font-weight: 600; }
-  .link-ip { color: var(--faint); font-size: 12px; }
-  .link-speed { margin-left: auto; text-align: right; font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
-  .link-speed small { display: block; font-size: 11.5px; font-weight: 500; color: var(--muted); }
-  .rows { margin-top: 14px; display: grid; gap: 9px; }
-  .row { display: flex; justify-content: space-between; color: var(--muted); font-size: 12.5px; }
-  .row b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
-  .bar { height: 6px; border-radius: 99px; background: var(--panel-2); overflow: hidden; margin-top: 5px; }
-  .bar i { display: block; height: 100%; width: 0; background: var(--c); border-radius: 99px; transition: width .6s ease; }
-  .bar.limit i { background: var(--warn); }
-  .tag.wait { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
-  .link.waiting .link-speed, .link.waiting .rows { opacity: .45; }
-  .tag { font-size: 11px; padding: 2px 7px; border-radius: 6px; background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); margin-left: 6px; }
-
-  /* qbt banner */
-  .banner { padding: 14px 18px; display: flex; gap: 14px; align-items: flex-start; }
-  .banner .b-icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; flex: none;
-                    background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
-  .banner h3 { margin: 2px 0 4px; font-size: 14px; }
-  .banner p { margin: 0; color: var(--muted); font-size: 12.5px; }
-  .banner ol { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
-  .banner ol b { color: var(--text); font-weight: 600; }
-  .banner .actions { margin-left: auto; display: flex; gap: 8px; flex: none; }
-  .btn { border: 1px solid var(--line); background: var(--panel-2); border-radius: 9px; padding: 7px 13px; cursor: pointer; font-size: 13px; }
-  .btn:hover { border-color: var(--faint); }
-  .btn.primary { background: var(--eth); border-color: var(--eth); color: #fff; }
-  .link-btn { background: none; border: 0; padding: 0; color: var(--eth); cursor: pointer; font-size: 12.5px; }
-  .hidden { display: none !important; }
-
-  footer { color: var(--faint); font-size: 12px; display: flex; justify-content: space-between; }
-
-  /* settings drawer */
-  .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.45); opacity: 0; pointer-events: none; transition: opacity .2s; }
-  .scrim.open { opacity: 1; pointer-events: auto; }
-  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 92vw); background: var(--panel);
-            border-left: 1px solid var(--line); transform: translateX(100%); transition: transform .25s ease;
-            display: flex; flex-direction: column; }
-  .drawer.open { transform: none; }
-  .drawer-head { display: flex; align-items: center; padding: 18px 20px 10px; }
-  .drawer-head h2 { margin: 0; font-size: 17px; flex: 1; }
-  .drawer-body { overflow: auto; padding: 0 20px 24px; }
-  .section { border-top: 1px solid var(--line); padding: 16px 0 6px; }
-  .section:first-child { border-top: 0; }
-  .section h4 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); font-weight: 600; }
-  .field { margin-bottom: 12px; }
-  .field label { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 5px; }
-  .field .hint { font-size: 11.5px; color: var(--faint); margin-top: 4px; }
-  select, input[type=text], input[type=password], input[type=number] {
-    width: 100%; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2);
-    color: var(--text); font: inherit; outline: none; user-select: text;
-  }
-  select:focus, input:focus { border-color: var(--eth); }
-  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .toggle { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 8px 0; cursor: pointer; }
-  .toggle .t-text { font-size: 13.5px; }
-  .toggle .t-text small { display: block; color: var(--faint); font-size: 11.5px; }
-  .switch { position: relative; width: 38px; height: 22px; flex: none; }
+  /* switch */
+  .switch { position: relative; width: 38px; height: 22px; flex: none; cursor: pointer; }
   .switch input { opacity: 0; width: 0; height: 0; }
   .switch span { position: absolute; inset: 0; border-radius: 99px; background: var(--line); transition: .2s; }
   .switch span::after { content: ""; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; border-radius: 50%; background: #fff; transition: .2s; }
   .switch input:checked + span { background: var(--eth); }
   .switch input:checked + span::after { transform: translateX(16px); }
-  .note { font-size: 12px; color: var(--warn); margin: 4px 0 8px; }
-  .result { font-size: 12.5px; margin-top: 8px; }
-  .result.ok { color: var(--on); } .result.err { color: var(--bad); }
 
-  /* traffic check */
+  /* overlays */
+  .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.45); opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .scrim.open { opacity: 1; pointer-events: auto; }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 92vw); background: var(--panel); border-left: 1px solid var(--line);
+            transform: translateX(100%); transition: transform .25s; display: flex; flex-direction: column; }
+  .drawer.open { transform: none; }
+  .d-head, .m-head { display: flex; align-items: center; padding: 16px 20px 8px; }
+  .d-head h2, .m-head h2 { margin: 0; font-size: 17px; flex: 1; }
+  .d-body { overflow: auto; padding: 0 20px 24px; }
+  .section { border-top: 1px solid var(--line); padding: 14px 0 6px; }
+  .section:first-child { border-top: 0; }
+  .section h4 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); font-weight: 600; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 5px; }
+  .hint { font-size: 11.5px; color: var(--faint); margin-top: 4px; }
+  select, input[type=text], input[type=password], input[type=number] {
+    width: 100%; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2);
+    color: var(--text); font: inherit; outline: none; user-select: text; }
+  select:focus, input:focus { border-color: var(--eth); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .toggle { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 7px 0; cursor: pointer; }
+  .toggle small { display: block; color: var(--faint); font-size: 11.5px; }
+  .restart-note { font-size: 12px; color: var(--warn); margin: 2px 0 6px; }
+
   .modal { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -48%) scale(.98); opacity: 0; pointer-events: none;
-           width: min(640px, 94vw); max-height: 86vh; display: flex; flex-direction: column; background: var(--panel);
+           width: min(620px, 94vw); max-height: 88vh; display: flex; flex-direction: column; background: var(--panel);
            border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.45); transition: .2s; }
   .modal.open { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%); }
-  .modal-head { display: flex; align-items: center; padding: 16px 18px 6px; } .modal-head h2 { margin: 0; font-size: 17px; flex: 1; }
-  .modal-body { overflow: auto; padding: 6px 18px 12px; }
-  .modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-top: 1px solid var(--line); font-size: 12px; }
-  .note { display: flex; gap: 10px; padding: 10px 12px; border-radius: 10px; margin: 8px 0; font-size: 13px; background: var(--panel-2); border: 1px solid var(--line); }
-  .note i { font-style: normal; font-weight: 700; flex: none; }
-  .note.warn { border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); } .note.warn i { color: var(--warn); }
-  .note.good { border-color: color-mix(in srgb, var(--on) 35%, var(--line)); } .note.good i { color: var(--on); }
-  .note.info i { color: var(--eth); }
-  .ck-h { margin: 16px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); font-weight: 600; }
-  .ck-apps { display: flex; flex-wrap: wrap; gap: 6px; }
+  .m-body { overflow: auto; padding: 4px 20px 14px; }
+  .m-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--line); font-size: 12px; }
+
+  /* setup steps */
+  .steps { list-style: none; counter-reset: s; margin: 6px 0 0; padding: 0; }
+  .steps > li { counter-increment: s; position: relative; padding: 4px 0 14px 40px; }
+  .steps > li::before { content: counter(s); position: absolute; left: 0; top: 2px; width: 26px; height: 26px; border-radius: 50%;
+                        display: grid; place-items: center; font-size: 12.5px; font-weight: 700; background: var(--panel-2); border: 1px solid var(--line); }
+  .steps > li.done::before { content: "✓"; color: var(--on); border-color: color-mix(in srgb, var(--on) 40%, var(--line)); }
+  .steps .s-title { font-weight: 600; }
+  .steps .s-where { color: var(--muted); font-size: 12.5px; margin: 1px 0 6px; }
+  .steps ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
+  .steps ul li { margin: 3px 0; } .steps b { color: var(--text); font-weight: 600; }
+  code { color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px;
+         font: 12px ui-monospace, "Cascadia Mono", Consolas, monospace; user-select: text; }
+  .copy { border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 6px; padding: 0 8px;
+          font-size: 11.5px; cursor: pointer; margin-left: 4px; line-height: 20px; }
+  .copy:hover { color: var(--text); border-color: var(--faint); }
+  .result { font-size: 12.5px; margin-left: 10px; } .result.ok { color: var(--on); } .result.err { color: var(--bad); }
+  details { margin-top: 4px; border-top: 1px solid var(--line); padding-top: 10px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 12.5px; margin-bottom: 10px; }
+  .tip { font-size: 12px; color: var(--faint); margin: 2px 0 0; }
+
+  /* traffic check */
+  .ck-note { display: flex; gap: 10px; padding: 10px 12px; border-radius: 10px; margin: 8px 0; font-size: 13px;
+             background: var(--panel-2); border: 1px solid var(--line); color: var(--text); }
+  .ck-note i { font-style: normal; font-weight: 700; flex: none; }
+  .ck-note.warn { border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); } .ck-note.warn i { color: var(--warn); }
+  .ck-note.good { border-color: color-mix(in srgb, var(--on) 35%, var(--line)); } .ck-note.good i { color: var(--on); }
+  .ck-note.info i { color: var(--eth); }
+  .ck-h { margin: 14px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); font-weight: 600; }
+  .chip { display: inline-flex; padding: 4px 10px; border-radius: 999px; font-size: 12.5px; border: 1px solid var(--line);
+          background: var(--panel-2); color: var(--muted); margin: 0 6px 6px 0; }
+  .chip.good { color: var(--on); border-color: color-mix(in srgb, var(--on) 35%, var(--line)); }
   .ck-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-  .ck-table th { text-align: left; color: var(--faint); font-weight: 500; padding: 4px 6px; }
-  .ck-table td { padding: 7px 6px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; vertical-align: top; }
-  .ck-table td.num { text-align: right; } .ck-table td.bad { color: var(--warn); font-weight: 600; }
+  .ck-table th { text-align: right; color: var(--faint); font-weight: 500; padding: 4px 6px; }
+  .ck-table th:first-child { text-align: left; }
+  .ck-table td { padding: 7px 6px; border-top: 1px solid var(--line); text-align: right; font-variant-numeric: tabular-nums; vertical-align: top; }
+  .ck-table td:first-child { text-align: left; } .ck-table td.bad { color: var(--warn); font-weight: 600; }
   .ck-direct { color: var(--faint); font-size: 11.5px; margin-top: 2px; }
   .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--eth);
              animation: spin .8s linear infinite; display: inline-block; vertical-align: -4px; margin-right: 8px; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  .toast { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 20px); opacity: 0; transition: .25s;
-           background: var(--panel-2); border: 1px solid var(--line); padding: 10px 16px; border-radius: 11px;
-           box-shadow: var(--shadow); max-width: 80%; font-size: 13px; pointer-events: none; }
+  .toast { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 20px); opacity: 0; transition: .25s; pointer-events: none;
+           background: var(--panel-2); border: 1px solid var(--line); padding: 10px 16px; border-radius: 11px; box-shadow: var(--shadow); max-width: 80%; font-size: 13px; }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
   .toast.err { border-color: var(--bad); }
 
-  @media (max-width: 720px) { .links { grid-template-columns: 1fr; } .hero { grid-template-columns: auto 1fr; } .hero .chip { grid-column: 1 / -1; justify-self: start; } }
+  @media (prefers-color-scheme: light) { .btn.warn { color: #fff; } }
+  @media (max-width: 640px) { .tiles { grid-template-columns: 1fr; } .speed { font-size: 34px; } }
 </style>
 </head>
 <body>
@@ -209,203 +182,109 @@
       <path d="M32 37v9" stroke="#ebeef5" stroke-width="5.5" stroke-linecap="round"/>
       <path d="M21 43h22L32 55z" fill="#ebeef5"/>
     </svg>
-    <div>
-      <div class="title">DualLink</div>
-      <div class="sub">Ethernet + phone hotspot for faster downloads</div>
-    </div>
+    <div><div class="title">DualLink</div><div class="sub">Ethernet + phone hotspot for faster downloads</div></div>
     <div class="spacer"></div>
-    <button class="btn" id="openCheck" title="See which programs use DualLink and where your traffic goes">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Traffic check</button>
+    <button class="btn" id="openCheck" title="See which programs use DualLink and where your traffic goes">Traffic check</button>
     <button class="icon-btn" id="openSettings" title="Settings" aria-label="Settings">
-      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
   </header>
 
-  <section class="card hero">
-    <button class="power" id="power" title="Turn DualLink on/off" aria-label="Turn DualLink on or off">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v8"/><path d="M6.4 6.6a8 8 0 1 0 11.2 0"/></svg>
-    </button>
-    <div>
-      <div class="state-label" id="stateLabel"><b>Off</b> · press the button to combine your connections</div>
-      <div class="speed-big" id="combined">0<small>B/s</small></div>
-      <div class="split">
-        <span><i class="dot" style="background:var(--eth)"></i>Ethernet <b id="ethMini">0 B/s</b></span>
-        <span><i class="dot" style="background:var(--hot)"></i>Hotspot <b id="hotMini">0 B/s</b></span>
+  <section class="card main">
+    <div class="top">
+      <button class="power" id="power" aria-label="Turn DualLink on or off">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v8"/><path d="M6.4 6.6a8 8 0 1 0 11.2 0"/></svg>
+      </button>
+      <div>
+        <div class="state" id="state"><b>Off</b></div>
+        <div class="speed" id="combined">0<small>B/s</small></div>
+      </div>
+    </div>
+    <canvas id="chart"></canvas>
+    <div class="tiles">
+      <div class="tile" id="tileEth" style="--c:var(--eth)">
+        <i class="dot"></i>
+        <div class="t-main"><div class="t-name">Ethernet</div><div class="t-sub" data-k="sub">-</div></div>
+        <div class="t-speed" data-k="speed">-</div>
+      </div>
+      <div class="tile" id="tileHot" style="--c:var(--hot)">
+        <i class="dot"></i>
+        <div class="t-main"><div class="t-name">Phone hotspot</div><div class="t-sub" data-k="sub">-</div>
+          <div class="bar hidden" data-k="bar"><i data-k="barFill"></i></div></div>
+        <div class="t-speed" data-k="speed">-</div>
       </div>
     </div>
   </section>
 
   <section class="card apps">
-    <div class="apps-head"><b>Apps</b><span>Switch on the apps you download with</span></div>
+    <h3>Apps</h3>
     <div class="app-row">
-      <div class="app-badge" style="--b:#3c78d8">qB</div>
-      <div class="app-text"><div class="app-name">qBittorrent</div><div class="app-desc" id="qbtDesc"></div></div>
-      <span class="chip hidden" id="qbtChip"></span>
+      <div class="badge" style="--b:#3c78d8">qB</div>
+      <div class="app-main"><div class="app-name">qBittorrent</div><div class="app-status" id="qbtStatus"></div></div>
+      <button class="btn small" id="qbtSetup">Set up</button>
       <label class="switch" title="Use DualLink with qBittorrent"><input type="checkbox" id="app_qbt"><span></span></label>
     </div>
     <div class="app-row">
-      <div class="app-badge" style="--b:#2aa36b">FDM</div>
-      <div class="app-text"><div class="app-name">Free Download Manager</div><div class="app-desc" id="fdmDesc"></div></div>
-      <button class="link-btn" id="fdmStepsBtn">Setup steps</button>
-      <span class="chip hidden" id="fdmChip"></span>
+      <div class="badge" style="--b:#2aa36b">FDM</div>
+      <div class="app-main"><div class="app-name">Free Download Manager</div><div class="app-status" id="fdmStatus"></div></div>
+      <button class="btn small" id="fdmSetup">Set up</button>
       <label class="switch" title="Use DualLink with Free Download Manager"><input type="checkbox" id="app_fdm"><span></span></label>
     </div>
-    <div class="steps hidden" id="fdmSteps">
-      <p>One-time setup - leave it like this afterwards:</p>
-      <ol>
-        <li>In Free Download Manager open the menu <b>☰ › Settings › Network</b></li>
-        <li>Choose manual proxy configuration with type <b>SOCKS5</b></li>
-        <li>Address <code>127.0.0.1</code> <button class="copy" data-copy="127.0.0.1">Copy</button>
-            &nbsp; Port <code id="fdmPort">1080</code> <button class="copy" id="fdmPortCopy" data-copy="1080">Copy</button></li>
-        <li>Optional: allow 8 or more connections per download, so one file can use both links</li>
-      </ol>
-      <p class="muted">While DualLink is off, FDM downloads go out over your normal connection. Keep DualLink
-        running in the tray - if it's closed, FDM can't download.
-        <button class="link-btn hidden" id="enableAutostart">Start DualLink with Windows</button></p>
-    </div>
   </section>
-
-  <section class="card banner hidden" id="qbtBanner">
-    <div class="b-icon">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 8v5"/><path d="M12 16.5v.5"/><circle cx="12" cy="12" r="9.5"/></svg>
-    </div>
-    <div style="flex:1">
-      <h3 id="bTitle">Let DualLink set up qBittorrent for you</h3>
-      <p id="bText">DualLink is running, but it can't reach qBittorrent yet. One-time setup:</p>
-      <ol id="bSteps">
-        <li>In qBittorrent open <b>Tools › Options › Web UI</b></li>
-        <li>Tick <b>Web User Interface (Remote control)</b> - keep port <b>8080</b></li>
-        <li>Tick <b>Bypass authentication for clients on localhost</b>, click <b>OK</b></li>
-      </ol>
-      <p style="margin-top:8px"><button class="link-btn" id="showManual">Prefer to set qBittorrent up by hand?</button></p>
-      <ol id="manualSteps" class="hidden">
-        <li><b>Tools › Options › Connection</b>: Peer connection protocol <b>TCP</b></li>
-        <li>Proxy <b>SOCKS5</b>, host <b>127.0.0.1</b>, port <b id="manualPort">1080</b></li>
-        <li>Tick <b>Use proxy for BitTorrent purposes</b> and <b>Use proxy for peer connections</b></li>
-        <li>Click <b>Apply</b>, then pause and resume your torrents</li>
-      </ol>
-    </div>
-    <div class="actions"><button class="btn primary" id="retryQbt">Try again</button></div>
-  </section>
-
-  <section class="card chart-card">
-    <div class="chart-head">
-      <span>Download speed · last 90 seconds</span>
-      <span class="legend"><span><i class="dot" style="background:var(--eth)"></i>Ethernet</span><span><i class="dot" style="background:var(--hot)"></i>Hotspot</span></span>
-    </div>
-    <canvas id="chart"></canvas>
-  </section>
-
-  <section class="links">
-    <div class="card link" style="--c:var(--eth)" id="linkEth">
-      <div class="link-head">
-        <div class="link-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></div>
-        <div><div class="link-name">Ethernet <span class="tag wait hidden" data-k="waitTag">waiting</span></div><div class="link-ip" data-k="ip">not selected</div></div>
-        <div class="link-speed"><span data-k="speed">0 B/s</span><small>download</small></div>
-      </div>
-      <div class="rows">
-        <div><div class="row"><span>Share of new connections</span><b data-k="share">-</b></div><div class="bar"><i data-k="shareBar"></i></div></div>
-        <div class="row"><span>Open connections</span><b data-k="conns">0</b></div>
-        <div class="row"><span>Downloaded this session</span><b data-k="down">0 B</b></div>
-      </div>
-    </div>
-    <div class="card link" style="--c:var(--hot)" id="linkHot">
-      <div class="link-head">
-        <div class="link-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M11 18.5h2"/></svg></div>
-        <div><div class="link-name">Phone hotspot <span class="tag wait hidden" data-k="waitTag">waiting</span><span class="tag hidden" data-k="limitTag">limit reached</span></div><div class="link-ip" data-k="ip">not selected</div></div>
-        <div class="link-speed"><span data-k="speed">0 B/s</span><small>download</small></div>
-      </div>
-      <div class="rows">
-        <div><div class="row"><span>Share of new connections</span><b data-k="share">-</b></div><div class="bar"><i data-k="shareBar"></i></div></div>
-        <div class="row"><span>Open connections</span><b data-k="conns">0</b></div>
-        <div><div class="row"><span>Mobile data used this session</span><b data-k="used">0 B</b></div><div class="bar limit" data-k="limitWrap"><i data-k="limitBar"></i></div></div>
-      </div>
-    </div>
-  </section>
-
-  <footer>
-    <span id="footLeft">Automatic balancing on</span>
-    <span id="footRight">Proxy 127.0.0.1:1080</span>
-  </footer>
 </div>
 
+<!-- Settings -->
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-label="Settings">
-  <div class="drawer-head">
-    <h2>Settings</h2>
-    <button class="icon-btn" id="closeSettings" aria-label="Close settings">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-    </button>
-  </div>
-  <div class="drawer-body">
-    <div class="note hidden" id="restartNote">A new proxy port applies the next time you turn DualLink on. Connection changes apply right away.</div>
-
+  <div class="d-head"><h2>Settings</h2>
+    <button class="icon-btn" id="closeSettings" aria-label="Close settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div class="d-body">
+    <div class="restart-note hidden" id="restartNote">A new proxy port applies the next time you turn DualLink on.</div>
     <div class="section">
       <h4>Connections</h4>
       <div class="field"><label for="s_eth">Ethernet (home internet)</label><select id="s_eth"></select></div>
       <div class="field"><label for="s_hot">Phone hotspot</label><select id="s_hot"></select>
-        <div class="hint">DualLink remembers the connection by name and follows it if its address changes or it reconnects. Not listed? Connect your phone, then <button class="link-btn" id="refreshAdapters">refresh the list</button>.</div></div>
+        <div class="hint">Not listed? Connect your phone, then <button class="link-btn" id="refreshAdapters">refresh the list</button>.</div></div>
     </div>
-
     <div class="section">
       <h4>Balancing</h4>
-      <label class="toggle"><span class="t-text">Favour the faster connection automatically<small>Measures both links and gives the faster one more peers</small></span>
+      <label class="toggle"><span>Favour the faster connection automatically<small>Gives the faster link more of the new connections</small></span>
         <span class="switch"><input type="checkbox" id="s_auto"><span></span></span></label>
-      <label class="toggle" id="recycleRow"><span class="t-text">Move idle peers to the faster connection<small>Reconnects peers that have been idle for 90 s</small></span>
+      <label class="toggle" id="recycleRow"><span>Move idle connections to the faster link<small>Reconnects peers that have been idle for 90 s</small></span>
         <span class="switch"><input type="checkbox" id="s_recycle"><span></span></span></label>
       <div class="two hidden" id="manualShares">
         <div class="field"><label for="s_share_eth">Ethernet share</label><input type="number" id="s_share_eth" min="0.1" step="0.5"></div>
         <div class="field"><label for="s_share_hot">Hotspot share</label><input type="number" id="s_share_hot" min="0.1" step="0.5"></div>
       </div>
     </div>
-
     <div class="section">
       <h4>Mobile data</h4>
       <div class="field"><label for="s_quota">Stop using the hotspot after (MB)</label><input type="number" id="s_quota" min="0" step="100">
         <div class="hint">0 = no limit. Counted from when you turn DualLink on.</div></div>
     </div>
-
-    <div class="section">
-      <h4>qBittorrent</h4>
-      <label class="toggle"><span class="t-text">Use with qBittorrent<small>Applies the proxy when on, restores your settings when off</small></span>
-        <span class="switch"><input type="checkbox" id="s_qbt_auto"><span></span></span></label>
-      <div id="qbtFields">
-        <div class="field"><label for="s_qbt_url">Web UI address</label><input type="text" id="s_qbt_url" spellcheck="false"></div>
-        <div class="two">
-          <div class="field"><label for="s_qbt_user">Username (optional)</label><input type="text" id="s_qbt_user" spellcheck="false"></div>
-          <div class="field"><label for="s_qbt_pass">Password</label><input type="password" id="s_qbt_pass"></div>
-        </div>
-        <label class="toggle"><span class="t-text">Reconnect downloading torrents<small>So existing peers switch over immediately</small></span>
-          <span class="switch"><input type="checkbox" id="s_reconnect"><span></span></span></label>
-        <button class="btn" id="testQbt">Test connection</button>
-        <div class="result" id="testResult"></div>
-      </div>
-    </div>
-
     <div class="section">
       <h4>App</h4>
-      <label class="toggle"><span class="t-text">Keep running in the system tray when closed</span>
-        <span class="switch"><input type="checkbox" id="s_tray"><span></span></span></label>
-      <label class="toggle"><span class="t-text">Start with Windows</span>
-        <span class="switch"><input type="checkbox" id="s_autostart"><span></span></span></label>
+      <label class="toggle"><span>Keep running in the tray when closed</span><span class="switch"><input type="checkbox" id="s_tray"><span></span></span></label>
+      <label class="toggle"><span>Start with Windows</span><span class="switch"><input type="checkbox" id="s_autostart"><span></span></span></label>
       <div class="field"><label for="s_port">Proxy port</label><input type="number" id="s_port" min="1024" max="65535"></div>
     </div>
   </div>
 </aside>
 
-<div class="scrim" id="checkScrim"></div>
-<div class="modal" id="checkModal" role="dialog" aria-label="Traffic check">
-  <div class="modal-head"><h2>Traffic check</h2>
-    <button class="icon-btn" id="closeCheck" aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
-  <div class="modal-body" id="checkBody"></div>
-  <div class="modal-foot"><span class="muted" id="checkFoot"></span><button class="btn primary" id="rerunCheck">Check again</button></div>
+<!-- Setup guides / traffic check -->
+<div class="scrim" id="mScrim"></div>
+<div class="modal" id="modal" role="dialog">
+  <div class="m-head"><h2 id="mTitle"></h2>
+    <button class="icon-btn" id="mClose" aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div class="m-body" id="mBody"></div>
+  <div class="m-foot" id="mFoot"></div>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
 const $ = (id) => document.getElementById(id);
-let api = null, settings = {}, running = false, saveTimer = null, savePending = false;
+let api = null, settings = {}, last = null, running = false, saveTimer = null, savePending = false, modalKind = null;
 
 // ---------- formatting ----------
 function fmtSpeed(b) {
@@ -414,17 +293,19 @@ function fmtSpeed(b) {
   return { n: i === 0 ? Math.round(b).toString() : b.toFixed(b < 10 ? 2 : 1), u: u[i] };
 }
 const speedStr = (b) => { const s = fmtSpeed(b); return `${s.n} ${s.u}`; };
-function axisStr(b) {   // compact labels for the graph axis
-  if (b <= 0) return "0";
-  const u = ["B/s", "KiB/s", "MiB/s", "GiB/s"]; let i = 0;
-  while (b >= 1000 && i < u.length - 1) { b /= 1024; i++; }
-  return `${+b.toFixed(b < 10 ? 1 : 0)} ${u[i]}`;
-}
 function sizeStr(b) {
   const u = ["B", "KiB", "MiB", "GiB", "TiB"]; let i = 0;
   while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
   return i === 0 ? `${Math.round(b)} B` : `${b.toFixed(1)} ${u[i]}`;
 }
+function axisStr(b) {
+  if (b <= 0) return "0";
+  const u = ["B/s", "KiB/s", "MiB/s", "GiB/s"]; let i = 0;
+  while (b >= 1000 && i < u.length - 1) { b /= 1024; i++; }
+  return `${+b.toFixed(b < 10 ? 1 : 0)} ${u[i]}`;
+}
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
 function toast(msg, err = false) {
   const t = $("toast"); t.textContent = msg; t.className = "toast show" + (err ? " err" : "");
@@ -432,141 +313,99 @@ function toast(msg, err = false) {
 }
 
 // ---------- chart ----------
-const chart = $("chart");
-function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 function niceMax(v) {
   if (v <= 0) return 1024 * 1024;
   const p = Math.pow(1024, Math.floor(Math.log(v) / Math.log(1024)));
-  const steps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
-  for (const s of steps) if (s * p >= v * 1.1) return s >= 1000 ? 1024 * p : s * p;
+  for (const s of [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]) if (s * p >= v * 1.1) return s >= 1000 ? 1024 * p : s * p;
   return v * 1.2;
 }
 function drawChart(eth, hot) {
-  const dpr = window.devicePixelRatio || 1, w = chart.clientWidth, h = chart.clientHeight;
-  if (chart.width !== w * dpr || chart.height !== h * dpr) { chart.width = w * dpr; chart.height = h * dpr; }
-  const g = chart.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
-  const n = eth.length, top = 8, bottom = h - 18, left = 0, right = w - 64;
-  const total = eth.map((v, i) => v + hot[i]);
-  const max = niceMax(Math.max(...total, 0));
-  const x = (i) => left + (right - left) * (i / (n - 1));
-  const y = (v) => bottom - (bottom - top) * (v / max);
-  // grid
-  g.strokeStyle = css("--line"); g.lineWidth = 1; g.fillStyle = css("--faint"); g.font = "11px Segoe UI, sans-serif";
+  const c = $("chart"), dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+  if (c.width !== w * dpr || c.height !== h * dpr) { c.width = w * dpr; c.height = h * dpr; }
+  const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  const n = eth.length, top = 6, bottom = h - 4, right = w - 58;
+  const total = eth.map((v, i) => v + hot[i]), max = niceMax(Math.max(...total, 0));
+  const x = (i) => right * (i / (n - 1)), y = (v) => bottom - (bottom - top) * (v / max);
+  g.strokeStyle = css("--line"); g.fillStyle = css("--faint"); g.font = "11px Segoe UI, sans-serif"; g.lineWidth = 1;
   for (let k = 0; k <= 2; k++) {
     const v = (max * k) / 2, yy = Math.round(y(v)) + 0.5;
-    g.beginPath(); g.moveTo(left, yy); g.lineTo(right, yy); g.stroke();
-    g.fillText(axisStr(v), right + 8, yy + 4);
+    g.beginPath(); g.moveTo(0, yy); g.lineTo(right, yy); g.stroke(); g.fillText(axisStr(v), right + 8, yy + 4);
   }
-  g.fillText("90s", left, h - 3); g.fillText("now", right - 22, h - 3);
+  if (Math.max(...total) <= 0) return;
   const area = (lower, upper, color) => {
     g.beginPath(); g.moveTo(x(0), y(upper[0]));
     for (let i = 1; i < n; i++) g.lineTo(x(i), y(upper[i]));
     for (let i = n - 1; i >= 0; i--) g.lineTo(x(i), y(lower[i]));
     g.closePath();
-    const grad = g.createLinearGradient(0, top, 0, bottom);
-    grad.addColorStop(0, color + "66"); grad.addColorStop(1, color + "14");
+    const grad = g.createLinearGradient(0, top, 0, bottom); grad.addColorStop(0, color + "66"); grad.addColorStop(1, color + "14");
     g.fillStyle = grad; g.fill();
-    g.beginPath(); g.moveTo(x(0), y(upper[0]));
-    for (let i = 1; i < n; i++) g.lineTo(x(i), y(upper[i]));
+    g.beginPath(); g.moveTo(x(0), y(upper[0])); for (let i = 1; i < n; i++) g.lineTo(x(i), y(upper[i]));
     g.strokeStyle = color; g.lineWidth = 1.8; g.stroke();
   };
-  if (Math.max(...total) <= 0) return;   // nothing to plot yet (off): grid only
-  const zero = eth.map(() => 0);
-  area(zero, eth, css("--eth"));
+  area(eth.map(() => 0), eth, css("--eth"));
   area(eth, total, css("--hot"));
 }
 
-// ---------- status rendering ----------
-function setLink(el, l, isHot) {
+// ---------- status ----------
+function renderTile(el, l, isHot) {
   const q = (k) => el.querySelector(`[data-k="${k}"]`);
   const name = l.adapter || (isHot ? settings.hot_name : settings.eth_name);
   const waiting = running && !l.present;
   el.classList.toggle("waiting", waiting);
-  q("waitTag").classList.toggle("hidden", !waiting);
-  q("ip").textContent = !name ? "not selected"
-    : waiting ? `${name} · not connected - will join automatically`
-    : `${name} · ${l.ip || (isHot ? settings.hot_ip : settings.eth_ip) || "not connected"}`;
-  q("speed").textContent = speedStr(l.speed);
-  q("share").textContent = running ? `${l.share}%` : "-";
-  q("shareBar").style.width = running ? `${l.share}%` : "0%";
-  q("conns").textContent = l.connections;
-  if (!isHot) { q("down").textContent = sizeStr(l.down); return; }
-  const used = l.down + l.up;
-  q("used").textContent = l.quota ? `${sizeStr(used)} of ${sizeStr(l.quota)}` : sizeStr(used);
-  q("limitWrap").classList.toggle("hidden", !l.quota);
-  q("limitBar").style.width = l.quota ? `${Math.min(100, (100 * used) / l.quota)}%` : "0%";
-  q("limitTag").classList.toggle("hidden", !l.over_quota);
-}
-
-function render(s) {
-  running = s.running;
-  $("power").classList.toggle("on", running);
-  const c = fmtSpeed(s.combined);
-  $("combined").innerHTML = `${c.n}<small>${c.u}</small>`;
-  $("ethMini").textContent = speedStr(s.links[0].speed);
-  $("hotMini").textContent = speedStr(s.links[1].speed);
-  const [ethOk, hotOk] = s.links.map((l) => l.present);
-  $("stateLabel").innerHTML = !running ? (s.standby
-        ? "<b>Off</b> · downloads use your normal connection - press to combine"
-        : "<b>Off</b> · press the button to combine your connections")
-    : ethOk && hotOk ? "<b>On</b> · combining Ethernet and hotspot"
-    : ethOk ? "<b>On</b> · using Ethernet only - waiting for the hotspot"
-    : "<b>On</b> · using the hotspot only - waiting for Ethernet";
-  setLink($("linkEth"), s.links[0], false);
-  setLink($("linkHot"), s.links[1], true);
-  drawChart(s.links[0].history, s.links[1].history);
-
-  renderApps(s);
-  const st = s.qbt.state;
-  const showBanner = running && s.qbt_auto && (st === "unreachable" || st === "auth" || st === "error");
-  $("qbtBanner").classList.toggle("hidden", !showBanner);
-  if (showBanner) {
-    const auth = st === "auth";
-    $("bTitle").textContent = auth ? "qBittorrent needs a login" : "Let DualLink set up qBittorrent for you";
-    $("bText").textContent = auth ? s.qbt.message + " You can enter the Web UI username and password in Settings."
-                                  : "DualLink is running, but it can't reach qBittorrent yet. One-time setup:";
-    $("bSteps").classList.toggle("hidden", auth);
+  q("speed").textContent = running ? speedStr(l.speed) : "-";
+  let sub;
+  if (!name) sub = "Not chosen - pick it in Settings";
+  else if (waiting) sub = `${name} isn't connected - joins automatically`;
+  else if (!running) sub = name;
+  else sub = `${plural(l.connections, "connection")}${l.over_quota ? " · data limit reached" : ""}`;
+  q("sub").textContent = sub;
+  if (isHot) {
+    const used = l.down + l.up, show = running && l.quota > 0;
+    q("bar").classList.toggle("hidden", !show);
+    if (show) { q("barFill").style.width = `${Math.min(100, (100 * used) / l.quota)}%`; q("sub").textContent += ` · ${sizeStr(used)} of ${sizeStr(l.quota)}`; }
   }
-  $("manualPort").textContent = s.port;
-  $("footLeft").textContent = s.auto
-    ? `Automatic balancing on${s.moved ? ` · ${s.moved} idle peer${s.moved === 1 ? "" : "s"} moved to the faster link` : ""}`
-    : "Fixed shares (automatic balancing off)";
-  $("footRight").textContent = running
-    ? `${s.dht ? "DHT connected · " : ""}Proxy running on 127.0.0.1:${s.port}`
-    : s.standby ? `Pass-through for FDM on 127.0.0.1:${s.port}` : `Proxy port ${s.port}`;
-  $("restartNote").classList.toggle("hidden", !running);
 }
 
-function setChip(el, text, kind) {
-  el.classList.toggle("hidden", !text);
-  el.className = "chip" + (kind ? " " + kind : "") + (text ? "" : " hidden");
-  el.textContent = text || "";
-}
 function renderApps(s) {
   if (!savePending) { $("app_qbt").checked = s.qbt_auto; $("app_fdm").checked = s.fdm; }
   const st = s.qbt.state;
-  let qd, qc = null, qk = "";
-  if (!s.qbt_auto) qd = "Off - DualLink leaves qBittorrent's settings alone";
-  else if (!running) qd = "Ready - set up automatically when you turn DualLink on";
-  else if (st === "connected") { qd = "Set up automatically - restored when you turn DualLink off"; qc = "✓ Using DualLink"; qk = "good"; }
-  else if (st === "auth") { qd = "Enter the Web UI login in Settings"; qc = "Login needed"; qk = "warn"; }
-  else { qd = "Turn on qBittorrent's Web UI - see the steps below"; qc = "Not reachable"; qk = "warn"; }
-  $("qbtDesc").textContent = qd; setChip($("qbtChip"), qc, qk);
+  let qt = "Off", qk = "", needsFix = false;
+  if (s.qbt_auto) {
+    if (!running) qt = "Ready - set up automatically when DualLink is on";
+    else if (st === "connected") { qt = "✓ Connected"; qk = "good"; }
+    else if (st === "auth") { qt = "Login needed"; qk = "warn"; needsFix = true; }
+    else { qt = "Can't reach qBittorrent - needs setup"; qk = "warn"; needsFix = true; }
+  }
+  $("qbtStatus").textContent = qt; $("qbtStatus").className = "app-status " + qk;
+  $("qbtSetup").textContent = needsFix ? "Fix" : "Set up"; $("qbtSetup").className = "btn small" + (needsFix ? " warn" : "");
 
-  let fd, fc = null, fk = "";
-  if (!s.fdm) fd = "Off";
-  else if (s.standby_error) { fd = "Change the proxy port in Settings, then update FDM"; fc = "Port in use"; fk = "bad"; }
-  else if (running) { fd = "Spreads FDM downloads over both connections"; fc = "Active"; fk = "good"; }
-  else fd = "Ready - FDM downloads normally until you turn DualLink on";
-  $("fdmDesc").textContent = fd; setChip($("fdmChip"), fc, fk);
-  $("fdmStepsBtn").classList.toggle("hidden", !s.fdm);
-  if (!s.fdm) $("fdmSteps").classList.add("hidden");
-  $("fdmPort").textContent = s.port; $("fdmPortCopy").dataset.copy = s.port;
-  $("enableAutostart").classList.toggle("hidden", !!settings.autostart);
+  let ft = "Off", fk = "";
+  if (s.fdm) {
+    if (s.standby_error) { ft = "Proxy port is in use - change it in Settings"; fk = "bad"; }
+    else if (running) { ft = "✓ Active"; fk = "good"; }
+    else ft = "Ready - downloads pass straight through while DualLink is off";
+  }
+  $("fdmStatus").textContent = ft; $("fdmStatus").className = "app-status " + fk;
 }
 
+function render(s) {
+  last = s; running = s.running;
+  $("power").classList.toggle("on", running);
+  const c = fmtSpeed(s.combined); $("combined").innerHTML = `${c.n}<small>${c.u}</small>`;
+  const [ethOk, hotOk] = s.links.map((l) => l.present);
+  $("state").innerHTML = !running ? "<b>Off</b> · press the button to combine your connections"
+    : ethOk && hotOk ? "<b>On</b> · using Ethernet and hotspot together"
+    : ethOk ? "<b>On</b> · Ethernet only - waiting for the hotspot" : "<b>On</b> · hotspot only - waiting for Ethernet";
+  renderTile($("tileEth"), s.links[0], false);
+  renderTile($("tileHot"), s.links[1], true);
+  drawChart(s.links[0].history, s.links[1].history);
+  renderApps(s);
+  $("restartNote").classList.toggle("hidden", !running);
+  if (modalKind === "qbt") refreshQbtSteps();
+}
 async function poll() {
-  try { render(await api.status()); } catch (e) { /* window closing */ }
+  try { render(await api.status()); } catch (e) { /* closing */ }
   setTimeout(poll, 1000);
 }
 
@@ -589,124 +428,185 @@ function fillSettings() {
   $("s_auto").checked = s.auto; $("s_recycle").checked = s.recycle;
   $("s_share_eth").value = s.share_eth; $("s_share_hot").value = s.share_hot;
   $("s_quota").value = s.quota_mb; $("s_port").value = s.port;
-  $("s_qbt_auto").checked = s.qbt_auto; $("s_qbt_url").value = s.qbt_url; $("app_qbt").checked = s.qbt_auto; $("app_fdm").checked = s.fdm;
-  $("s_qbt_user").value = s.qbt_user; $("s_qbt_pass").value = s.qbt_pass;
-  $("s_reconnect").checked = s.reconnect; $("s_tray").checked = s.tray; $("s_autostart").checked = s.autostart;
-  syncVisibility();
+  $("s_tray").checked = s.tray; $("s_autostart").checked = s.autostart;
+  $("app_qbt").checked = s.qbt_auto; $("app_fdm").checked = s.fdm;
+  $("manualShares").classList.toggle("hidden", s.auto);
+  $("recycleRow").classList.toggle("hidden", !s.auto);
 }
-function syncVisibility() {
-  $("manualShares").classList.toggle("hidden", $("s_auto").checked);
-  $("recycleRow").classList.toggle("hidden", !$("s_auto").checked);
-  $("qbtFields").classList.toggle("hidden", !$("s_qbt_auto").checked);
-}
-function collect() {
-  return {
-    eth_name: $("s_eth").value, hot_name: $("s_hot").value,
-    auto: $("s_auto").checked, recycle: $("s_recycle").checked,
-    share_eth: parseFloat($("s_share_eth").value) || 1, share_hot: parseFloat($("s_share_hot").value) || 1,
-    quota_mb: parseFloat($("s_quota").value) || 0, port: parseInt($("s_port").value) || 1080,
-    qbt_auto: $("s_qbt_auto").checked, qbt_url: $("s_qbt_url").value.trim(),
-    qbt_user: $("s_qbt_user").value, qbt_pass: $("s_qbt_pass").value,
-    reconnect: $("s_reconnect").checked, tray: $("s_tray").checked, autostart: $("s_autostart").checked,
-    fdm: $("app_fdm").checked,
-  };
-}
-function scheduleSave() {
-  syncVisibility();
-  clearTimeout(saveTimer);
-  savePending = true;
+function save(patch) {                       // merge a change into the settings and save shortly after
+  Object.assign(settings, patch);
+  $("manualShares").classList.toggle("hidden", settings.auto);
+  $("recycleRow").classList.toggle("hidden", !settings.auto);
+  clearTimeout(saveTimer); savePending = true;
   saveTimer = setTimeout(async () => {
-    const res = await api.save_settings(collect());
-    savePending = false;
-    settings = res.settings;
-    if (res.error) {
-      toast(res.error, true);
-      $("s_eth").value = settings.eth_name; $("s_hot").value = settings.hot_name;   // undo the refused choice
-    }
-  }, 350);
+    const res = await api.save_settings(settings);
+    savePending = false; settings = res.settings;
+    if (res.error) { toast(res.error, true); $("s_eth").value = settings.eth_name; $("s_hot").value = settings.hot_name; }
+  }, 300);
 }
-function esc(t) { return String(t).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c])); }
-function openCheck(open) {
-  $("checkModal").classList.toggle("open", open); $("checkScrim").classList.toggle("open", open);
-  if (open) runCheck();
+async function saveNow(patch) {
+  Object.assign(settings, patch); clearTimeout(saveTimer);
+  const res = await api.save_settings(settings); settings = res.settings; savePending = false;
+  if (res.error) toast(res.error, true);
+}
+function bindSettings() {
+  const num = (id, key, parse) => $(id).addEventListener("input", () => save({ [key]: parse($(id).value) }));
+  const chk = (id, key) => $(id).addEventListener("change", () => save({ [key]: $(id).checked }));
+  $("s_eth").onchange = () => save({ eth_name: $("s_eth").value });
+  $("s_hot").onchange = () => save({ hot_name: $("s_hot").value });
+  chk("s_auto", "auto"); chk("s_recycle", "recycle"); chk("s_tray", "tray"); chk("s_autostart", "autostart");
+  num("s_share_eth", "share_eth", (v) => parseFloat(v) || 1); num("s_share_hot", "share_hot", (v) => parseFloat(v) || 1);
+  num("s_quota", "quota_mb", (v) => parseFloat(v) || 0);
+  $("s_port").addEventListener("change", () => save({ port: parseInt($("s_port").value) || 1080 }));   // on finish, not per keystroke
+}
+const openSettings = (open) => { $("drawer").classList.toggle("open", open); $("scrim").classList.toggle("open", open); };
+
+// ---------- modal ----------
+function openModal(kind, title, body, foot) {
+  modalKind = kind; $("mTitle").textContent = title; $("mBody").innerHTML = body; $("mFoot").innerHTML = foot || "";
+  $("modal").classList.add("open"); $("mScrim").classList.add("open");
+  $("mBody").querySelectorAll(".copy").forEach((b) => (b.onclick = () => copyText(b.dataset.copy)));
+}
+function closeModal() { modalKind = null; $("modal").classList.remove("open"); $("mScrim").classList.remove("open"); }
+async function copyText(text) {
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch (e) { ok = await api.copy(text); }
+  toast(ok ? `Copied ${text}` : `Couldn't copy - type ${text}`, !ok);
+}
+const copyBtn = (t) => `<button class="copy" data-copy="${esc(t)}">Copy</button>`;
+
+function qbtPort() { try { return new URL(settings.qbt_url).port || "8080"; } catch (e) { return "8080"; } }
+function openQbtSetup() {
+  openModal("qbt", "Set up qBittorrent", `
+    <ol class="steps">
+      <li id="qStep1"><div class="s-title">Turn on qBittorrent's Web UI <span class="muted">(one time)</span></div>
+        <div class="s-where">In qBittorrent: <b>Tools › Options › Web UI</b></div>
+        <ul>
+          <li>Tick <b>Web User Interface (Remote control)</b></li>
+          <li>IP address: <code>127.0.0.1</code> ${copyBtn("127.0.0.1")} <span class="muted">- just the address, no http://</span></li>
+          <li>Port: <code>${esc(qbtPort())}</code></li>
+          <li>Tick <b>Bypass authentication for clients on localhost</b></li>
+          <li>Click <b>OK</b></li>
+        </ul></li>
+      <li id="qStep2"><div class="s-title">Check that DualLink can reach it</div>
+        <div style="margin-top:6px"><button class="btn small primary" id="qTest">Test connection</button><span class="result" id="qResult"></span></div></li>
+      <li id="qStep3"><div class="s-title">That's it</div>
+        <div class="s-where">When you turn DualLink on, it points qBittorrent at itself and reconnects running torrents.
+          When you turn it off, your own settings are put back.</div></li>
+    </ol>
+    <details><summary>Using a different port, or a Web UI password?</summary>
+      <div class="field"><label for="q_url">Web UI address</label><input type="text" id="q_url" spellcheck="false" value="${esc(settings.qbt_url)}"></div>
+      <div class="two">
+        <div class="field"><label for="q_user">Username</label><input type="text" id="q_user" spellcheck="false" value="${esc(settings.qbt_user)}"></div>
+        <div class="field"><label for="q_pass">Password</label><input type="password" id="q_pass" value="${esc(settings.qbt_pass)}"></div>
+      </div>
+      <div class="hint" style="margin-top:-6px;margin-bottom:8px">Only needed if you don't tick "Bypass authentication for clients on localhost".</div>
+      <label class="toggle"><span>Reconnect running torrents when switching<small>So existing peers move over immediately</small></span>
+        <span class="switch"><input type="checkbox" id="q_reconnect" ${settings.reconnect ? "checked" : ""}><span></span></span></label>
+    </details>`,
+    `<span class="muted">qBittorrent needs to be running.</span><button class="btn" id="qDone">Done</button>`);
+  $("qDone").onclick = closeModal;
+  $("qTest").onclick = testQbt;
+  for (const [id, key] of [["q_url", "qbt_url"], ["q_user", "qbt_user"], ["q_pass", "qbt_pass"]])
+    $(id).addEventListener("input", () => save({ [key]: $(id).value.trim() }));
+  $("q_reconnect").onchange = () => save({ reconnect: $("q_reconnect").checked });
+  refreshQbtSteps();
+}
+async function testQbt() {
+  $("qTest").disabled = true; $("qResult").textContent = "Checking…"; $("qResult").className = "result";
+  await saveNow({});
+  const r = await api.test_qbt();
+  if (modalKind !== "qbt") return;
+  $("qTest").disabled = false;
+  $("qResult").textContent = r.ok ? "✓ " + r.message : r.message; $("qResult").className = "result " + (r.ok ? "ok" : "err");
+  $("qStep1").classList.toggle("done", r.ok); $("qStep2").classList.toggle("done", r.ok);
+  if (r.ok && running) { const q = await api.retry_qbt(); if (q.state === "connected") toast("qBittorrent is now using DualLink"); }
+}
+function refreshQbtSteps() {
+  const ok = last && last.running && last.qbt.state === "connected";
+  if (ok) ["qStep1", "qStep2", "qStep3"].forEach((id) => $(id) && $(id).classList.add("done"));
+}
+
+function openFdmSetup() {
+  openModal("fdm", "Set up Free Download Manager", `
+    <ol class="steps">
+      <li><div class="s-title">Point FDM at DualLink <span class="muted">(one time)</span></div>
+        <div class="s-where">In FDM: <b>☰ › Settings › Network</b>, under Proxy</div>
+        <ul>
+          <li>Choose <b>Configure manually</b></li>
+          <li>SOCKS5: <code>127.0.0.1</code> ${copyBtn("127.0.0.1")} &nbsp;port <code>${esc(settings.port)}</code> ${copyBtn(String(settings.port))}</li>
+          <li>Leave HTTP, HTTPS and FTP empty</li>
+        </ul></li>
+      <li><div class="s-title">Allow several connections per file</div>
+        <div class="s-where">In FDM: <b>Settings › Traffic Limits</b></div>
+        <ul><li>Set <b>Maximum number of connections per server</b> to 8 or more for the mode you use
+          (Low / Medium / High, shown at the bottom of FDM)</li></ul></li>
+      <li><div class="s-title">Keep DualLink running</div>
+        <div class="s-where">While DualLink is off, FDM's downloads pass straight through. If DualLink is closed, FDM can't download.</div>
+        ${settings.autostart ? "" : `<button class="btn small" id="fAuto">Start DualLink with Windows</button>`}</li>
+    </ol>
+    <p class="tip">Some sites, like MediaFire, only accept one IP address per download link - those files can only use one connection.</p>`,
+    `<span class="muted">Use <b>Traffic check</b> during a download to confirm.</span><button class="btn" id="fDone">Done</button>`);
+  $("fDone").onclick = closeModal;
+  if ($("fAuto")) $("fAuto").onclick = async () => { await saveNow({ autostart: true }); $("s_autostart").checked = true; $("fAuto").remove(); toast("DualLink will start with Windows"); };
+}
+
+async function openTrafficCheck() {
+  openModal("check", "Traffic check", "", `<span class="muted" id="ckFoot"></span><button class="btn primary" id="ckAgain">Check again</button>`);
+  $("ckAgain").onclick = runCheck;
+  runCheck();
 }
 async function runCheck() {
-  $("rerunCheck").disabled = true;
-  $("checkBody").innerHTML = `<p style="color:var(--muted)"><span class="spinner"></span>Measuring for 3 seconds - keep your download running…</p>`;
-  $("checkFoot").textContent = "";
-  let r;
-  try { r = await api.traffic_check(); } finally { $("rerunCheck").disabled = false; }
-  if (!r.ok) { $("checkBody").innerHTML = `<div class="note info"><i>i</i><span>${esc(r.message)}</span></div>`; return; }
+  $("ckAgain").disabled = true; $("ckFoot").textContent = "";
+  $("mBody").innerHTML = `<p style="color:var(--muted)"><span class="spinner"></span>Measuring for 3 seconds - keep your download running…</p>`;
+  let r; try { r = await api.traffic_check(); } finally { if ($("ckAgain")) $("ckAgain").disabled = false; }
+  if (modalKind !== "check") return;
+  if (!r.ok) { $("mBody").innerHTML = `<div class="ck-note info"><i>i</i><span>${esc(r.message)}</span></div>`; return; }
   const icon = { warn: "!", good: "✓", info: "i" };
-  let h = r.notes.map((n) => `<div class="note ${n.kind}"><i>${icon[n.kind]}</i><span>${esc(n.text)}</span></div>`).join("");
+  let h = r.notes.map((n) => `<div class="ck-note ${n.kind}"><i>${icon[n.kind]}</i><span>${esc(n.text)}</span></div>`).join("");
   h += `<div class="ck-h">Programs using DualLink</div>`;
-  h += r.through.length
-    ? `<div class="ck-apps">${r.through.map((a) => `<span class="chip good">${esc(a.name)} · ${a.connections}</span>`).join("")}</div>`
-    : `<p class="muted" style="margin:4px 0">None right now.</p>`;
-  h += `<div class="ck-h">Download traffic per connection</div><table class="ck-table"><tr><th>Connection</th><th style="text-align:right">Windows sees</th><th style="text-align:right">Through DualLink</th><th style="text-align:right">Around DualLink</th></tr>`;
+  h += r.through.length ? r.through.map((a) => `<span class="chip good">${esc(a.name)} · ${plural(a.connections, "connection")}</span>`).join("")
+                        : `<p class="muted" style="margin:4px 0">None right now.</p>`;
+  h += `<div class="ck-h">Download speed</div><table class="ck-table"><tr><th>Connection</th><th>Windows sees</th><th>Through DualLink</th><th>Around DualLink</th></tr>`;
   for (const l of r.links) {
-    const other = l.other == null ? "-" : speedStr(l.other);
     const bad = l.other != null && l.other > Math.max(256 * 1024, 0.15 * (l.windows || 0));
-    const direct = l.direct_apps.length ? `<div class="ck-direct">Connecting directly: ${l.direct_apps.map((a) => `${esc(a.name)} (${a.connections})`).join(", ")}</div>` : "";
-    h += `<tr><td><b>${esc(l.label)}</b> <span class="muted">${esc(l.adapter || "")}</span>${direct}</td>
-          <td class="num">${l.windows == null ? "-" : speedStr(l.windows)}</td><td class="num">${speedStr(l.dualink)}</td>
-          <td class="num ${bad ? "bad" : ""}">${other}</td></tr>`;
+    const direct = bad && l.direct_apps.length
+      ? `<div class="ck-direct">Connecting directly: ${l.direct_apps.slice(0, 6).map((a) => `${esc(a.name)} (${a.connections})`).join(", ")}</div>` : "";
+    h += `<tr><td><b>${esc(l.label)}</b>${direct}</td><td>${l.windows == null ? "-" : speedStr(l.windows)}</td>
+          <td>${speedStr(l.dualink)}</td><td class="${bad ? "bad" : ""}">${l.other == null ? "-" : speedStr(l.other)}</td></tr>`;
   }
-  h += `</table>`;
-  $("checkBody").innerHTML = h;
-  $("checkFoot").textContent = `Measured over ${r.seconds} s with Windows' own counters. Small differences are normal.`;
-}
-function openSettings(open) {
-  $("drawer").classList.toggle("open", open); $("scrim").classList.toggle("open", open);
+  $("mBody").innerHTML = h + "</table>";
+  $("ckFoot").textContent = `Measured over ${r.seconds} s with Windows' own counters.`;
 }
 
 // ---------- wiring ----------
 async function init() {
   const st = await api.get_init();
-  settings = st.settings;
-  fillAdapters(st.adapters); fillSettings();
-  document.querySelectorAll(".drawer input, .drawer select").forEach((el) =>
-    el.addEventListener(el.type === "checkbox" || el.tagName === "SELECT" ? "change" : "input", scheduleSave));
+  settings = st.settings; fillAdapters(st.adapters); fillSettings(); bindSettings();
   $("openSettings").onclick = () => openSettings(true);
-  $("openCheck").onclick = () => openCheck(true);
-  $("closeCheck").onclick = $("checkScrim").onclick = () => openCheck(false);
-  $("rerunCheck").onclick = runCheck;
   $("closeSettings").onclick = $("scrim").onclick = () => openSettings(false);
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { openSettings(false); openCheck(false); } });
+  $("openCheck").onclick = openTrafficCheck;
+  $("mClose").onclick = $("mScrim").onclick = closeModal;
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { openSettings(false); closeModal(); } });
   $("refreshAdapters").onclick = async () => { const r = await api.refresh_adapters(); settings = r.settings; fillAdapters(r.adapters); toast("Connection list refreshed"); };
-  $("showManual").onclick = () => $("manualSteps").classList.toggle("hidden");
-  $("app_qbt").onchange = () => { $("s_qbt_auto").checked = $("app_qbt").checked; scheduleSave(); };
-  $("app_fdm").onchange = () => {
-    if ($("app_fdm").checked) $("fdmSteps").classList.remove("hidden");   // show the one-time steps
-    scheduleSave();
-  };
-  $("fdmStepsBtn").onclick = () => $("fdmSteps").classList.toggle("hidden");
-  document.querySelectorAll(".copy").forEach((b) => b.onclick = async () => {
-    const text = b.dataset.copy;
-    let ok = false;
-    try { await navigator.clipboard.writeText(text); ok = true; } catch (e) { ok = await api.copy(text); }
-    toast(ok ? `Copied ${text}` : `Couldn't copy - type ${text}`, !ok);
-  });
-  $("enableAutostart").onclick = () => { $("s_autostart").checked = true; scheduleSave(); toast("DualLink will start with Windows"); $("enableAutostart").classList.add("hidden"); };
-  $("retryQbt").onclick = async () => { const q = await api.retry_qbt(); toast(q.state === "connected" ? "qBittorrent set up" : q.message, q.state !== "connected"); };
-  $("testQbt").onclick = async () => {
-    clearTimeout(saveTimer); settings = (await api.save_settings(collect())).settings;
-    const r = await api.test_qbt(); const el = $("testResult");
-    el.textContent = r.message; el.className = "result " + (r.ok ? "ok" : "err");
-  };
+  $("qbtSetup").onclick = openQbtSetup;
+  $("fdmSetup").onclick = openFdmSetup;
+  $("app_qbt").onchange = () => { save({ qbt_auto: $("app_qbt").checked }); if ($("app_qbt").checked) openQbtSetup(); };
+  $("app_fdm").onchange = () => { save({ fdm: $("app_fdm").checked }); if ($("app_fdm").checked) openFdmSetup(); };
   $("power").onclick = async () => {
     const p = $("power"); p.classList.add("busy");
     try {
-      const r = running ? await api.power(false) : await api.power(true);
+      await saveNow({});
+      const r = await api.power(!running);
       if (!r.ok) { toast(r.message, true); if (/Settings/.test(r.message)) openSettings(true); }
       else if (r.message) toast(r.message);
       render(await api.status());
     } finally { p.classList.remove("busy"); }
   };
+  window.addEventListener("resize", () => last && drawChart(last.links[0].history, last.links[1].history));
   if (!settings.eth_name || !settings.hot_name) openSettings(true);
   poll();
 }
-window.addEventListener("resize", () => api && api.status().then(render));
 if (window.pywebview && window.pywebview.api) { api = window.pywebview.api; init(); }
 else window.addEventListener("pywebviewready", () => { api = window.pywebview.api; init(); });
 </script>
