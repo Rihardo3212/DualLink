@@ -59,6 +59,7 @@ class Link:
     def __init__(self, name):
         self.name = name
         self.ip = ""
+        self.ip6 = ""             # the adapter's global IPv6 address, if it has one
         self.weight = 1.0
         self.quota_bytes = 0          # 0 = unlimited (applies to down+up)
         self.active = 0
@@ -215,6 +216,8 @@ class BalancingProxy:
         # so connections go out normally (Windows picks the route) instead of failing.
         self.passthrough = False
         self.direct = Link("Direct")
+        self.refused_ipv6 = 0     # CONNECT requests to IPv6 addresses (not supported yet)
+        self.failed = 0           # connections that couldn't be made on any link
         self.udp_packets = 0
 
     # -- link choice -------------------------------------------------------- #
@@ -366,26 +369,42 @@ class BalancingProxy:
             if cmd not in (1, 3):
                 writer.write(b"\x05\x07\x00\x01\x00\x00\x00\x00\x00\x00")
                 return
+            v6 = False
             if atyp == 1:
                 host = socket.inet_ntoa(await reader.readexactly(4))
             elif atyp == 3:
                 ln = (await reader.readexactly(1))[0]
                 host = (await reader.readexactly(ln)).decode("ascii", "ignore")
-            elif atyp == 4 and cmd == 3:
-                await reader.readexactly(16)   # client's own address hint: not needed
-                host = ""
+            elif atyp == 4:
+                raw = await reader.readexactly(16)
+                host = "" if cmd == 3 else socket.inet_ntop(socket.AF_INET6, raw)   # UDP: just a hint
+                v6 = cmd == 1
             else:
-                writer.write(b"\x05\x08\x00\x01\x00\x00\x00\x00\x00\x00")  # IPv6 not supported
+                writer.write(b"\x05\x08\x00\x01\x00\x00\x00\x00\x00\x00")
                 return
             port = struct.unpack(">H", await reader.readexactly(2))[0]
             if cmd == 3:
                 await self._udp_associate(reader, writer)
                 return
 
+            can_v6 = self.passthrough or any(l.usable() and l.ip6 for l in self.links)
+            if v6 and not can_v6:
+                self.refused_ipv6 += 1
+                writer.write(b"\x05\x08\x00\x01\x00\x00\x00\x00\x00\x00")  # no link has IPv6 right now
+                return
             loop = asyncio.get_running_loop()
             try:
-                infos = await loop.getaddrinfo(host, port, family=socket.AF_INET, type=socket.SOCK_STREAM)
-                dest = infos[0][4]
+                if v6:
+                    dest = (host, port, 0, 0)
+                else:
+                    try:     # IPv4 first; fall back to IPv6 for names that only have an IPv6 address
+                        infos = await loop.getaddrinfo(host, port, family=socket.AF_INET, type=socket.SOCK_STREAM)
+                    except Exception:
+                        if atyp != 3 or not can_v6:
+                            raise
+                        infos = await loop.getaddrinfo(host, port, family=socket.AF_INET6, type=socket.SOCK_STREAM)
+                        v6 = True
+                    dest = infos[0][4]
             except Exception:
                 writer.write(b"\x05\x04\x00\x01\x00\x00\x00\x00\x00\x00")
                 return
@@ -394,16 +413,18 @@ class BalancingProxy:
             tried = set()
             while sock is None:
                 # pick again after every failure: the best link may have changed meanwhile
-                choices = [l for l in self.order() if id(l) not in tried]
+                choices = [l for l in self.order() if id(l) not in tried and (not v6 or l.ip6 or not l.ip)]
                 if not choices:
                     break
                 cand = choices[0]
                 tried.add(id(cand))
                 cand.pending += 1
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s = socket.socket(socket.AF_INET6 if v6 else socket.AF_INET, socket.SOCK_STREAM)
                 s.setblocking(False)
                 try:
-                    if cand.ip:              # the "Direct" pass-through link isn't bound
+                    if v6 and cand.ip6:      # the "Direct" pass-through link isn't bound
+                        s.bind((cand.ip6, 0, 0, 0))
+                    elif not v6 and cand.ip:
                         s.bind((cand.ip, 0))
                     await asyncio.wait_for(loop.sock_connect(s, dest), 10)
                     sock, link = s, cand
@@ -413,6 +434,7 @@ class BalancingProxy:
                 finally:
                     cand.pending -= 1
             if sock is None:
+                self.failed += 1
                 writer.write(b"\x05\x05\x00\x01\x00\x00\x00\x00\x00\x00")
                 return
 

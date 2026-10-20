@@ -35,6 +35,14 @@ DEFAULTS = {
 }
 
 
+def fmt_rate(b):
+    for unit in ("B/s", "KiB/s", "MiB/s"):
+        if b < 1024:
+            return f"{b:.0f} {unit}" if unit == "B/s" else f"{b:.1f} {unit}"
+        b /= 1024
+    return f"{b:.1f} GiB/s"
+
+
 def config_dir():
     base = os.environ.get("APPDATA") or os.path.expanduser("~/.config")
     p = pathlib.Path(base) / "DualLink"
@@ -63,11 +71,14 @@ class SettingsError(ValueError):
 
 
 class Controller:
-    def __init__(self, cfg_path=None, adapter_lister=list_adapters):
+    def __init__(self, cfg_path=None, adapter_lister=list_adapters, ipv6_lister=None):
         self.cfg_path = pathlib.Path(cfg_path) if cfg_path else config_dir() / "config.json"
         self.cfg = dict(DEFAULTS)
         self._load()
         self._list_adapters = adapter_lister
+        if ipv6_lister is None:
+            from .diag import adapter_ipv6 as ipv6_lister
+        self._list_ipv6 = ipv6_lister
         self.links = [Link("Ethernet"), Link("Hotspot")]
         self.proxy = BalancingProxy(self.links)
         self.running = False
@@ -140,14 +151,22 @@ class Controller:
 
     # ---- adapters ---------------------------------------------------------- #
     def _scan(self):
+        try:
+            v6 = self._list_ipv6() or {}
+        except Exception:
+            v6 = {}
         items, seen = [], set()
         for n, ip in self._list_adapters():
             name = pretty_adapter(n)
             if name in seen:          # adapter with several IPv4 addresses: keep the first
                 continue
             seen.add(name)
-            items.append({"name": name, "ip": ip, "hotspot": looks_like_hotspot(n, ip)})
+            items.append({"name": name, "ip": ip, "ip6": v6.get(name, ""), "hotspot": looks_like_hotspot(n, ip)})
         return items
+
+    @staticmethod
+    def _ip6_of(items, name):
+        return next((a["ip6"] for a in items if a["name"] == name), "") if name else ""
 
     @staticmethod
     def _ip_of(items, name):
@@ -179,7 +198,7 @@ class Controller:
         out = [dict(a, present=True) for a in items]
         for name in (eth, hot):          # keep an unplugged choice visible in the list
             if name and not any(a["name"] == name for a in items):
-                out.append({"name": name, "ip": "", "hotspot": False, "present": False})
+                out.append({"name": name, "ip": "", "ip6": "", "hotspot": False, "present": False})
         return out
 
     # ---- qBittorrent ------------------------------------------------------- #
@@ -226,8 +245,9 @@ class Controller:
                 note = f"{eth} isn't connected - DualLink is using the hotspot and will add Ethernet when it's back."
             elif not ips[1]:
                 note = f"{hot} isn't connected yet - DualLink will add the hotspot automatically when it appears."
-            for l, ip in zip(self.links, ips):
+            for l, ip, name in zip(self.links, ips, (eth, hot)):
                 l.ip = ip
+                l.ip6 = self._ip6_of(items, name)
                 l.down = l.up = l.failures = l.udp_bytes = 0
                 l.rate = l.per_conn = 0.0
                 l._last_down = 0
@@ -236,6 +256,7 @@ class Controller:
                 l.enabled = True
             self._apply_live_settings()
             self.proxy.moved = 0
+            self.proxy.refused_ipv6 = self.proxy.failed = 0
             self._quota_warned = False
             self._last = [(0, time.time()), (0, time.time())]
             try:
@@ -339,12 +360,14 @@ class Controller:
         for key, link, label in (("eth", self.links[0], "Ethernet"), ("hot", self.links[1], "Hotspot")):
             name = self.cfg[f"{key}_name"]
             ip = self._ip_of(items, name)
+            link.ip6 = self._ip6_of(items, name) if ip else ""
             if not ip and key == "hot":
                 # the phone may come back as a differently-named adapter (another USB port, Wi-Fi instead of USB)
                 other = self.cfg["eth_name"]
                 cand = next((a for a in items if a["ip"].startswith(PHONE_RANGES) and a["name"] != other), None)
                 if cand:
                     self.cfg["hot_name"], ip = cand["name"], cand["ip"]
+                    link.ip6 = cand["ip6"]
                     changed = True
             if ip == link.ip or not self.running:
                 continue
@@ -413,6 +436,66 @@ class Controller:
             "standby": (not self.running) and self.proxy_up(),
             "standby_error": self.standby_error,
         }
+
+    # ---- traffic check --------------------------------------------------------- #
+    def traffic_check(self, seconds=3.0):
+        """Compare what Windows sees on each connection with what DualLink carries, and list programs."""
+        from . import diag
+        rx_fn = getattr(self, "diag_rx", diag.adapter_rx_bytes)
+        conn_fn = getattr(self, "diag_conns", diag.connections_snapshot)
+        links = self.links
+        rx0, d0, t0 = rx_fn(), [l.down for l in links], time.monotonic()
+        time.sleep(seconds)
+        rx1, d1, t1 = rx_fn(), [l.down for l in links], time.monotonic()
+        dt = max(t1 - t0, 0.001)
+        port = self.proxy.port if self.proxy_up() else self.cfg["port"]
+        conns = conn_fn(port, os.getpid())
+        if not rx0 and not conns["through"] and not conns["direct"]:
+            return {"ok": False, "message": "The traffic check needs Windows."}
+
+        report_links, notes = [], []
+        for i, (key, label) in enumerate((("eth", "Ethernet"), ("hot", "Hotspot"))):
+            adapter = self.cfg[f"{key}_name"]
+            windows = None
+            if adapter in rx0 and adapter in rx1 and rx1[adapter] >= rx0[adapter]:
+                windows = (rx1[adapter] - rx0[adapter]) / dt
+            mine = (d1[i] - d0[i]) / dt if self.running else 0.0
+            other = None if windows is None else max(0.0, windows - mine * 1.05)   # ~5% protocol overhead
+            apps = sorted(conns["direct"].get(adapter, {}).items(), key=lambda kv: -kv[1])
+            report_links.append({"label": label, "adapter": adapter, "windows": windows, "dualink": mine,
+                                 "other": other, "direct_apps": [{"name": n, "connections": c} for n, c in apps]})
+            if other is not None and other > max(256 * 1024, 0.15 * (windows or 0)):
+                who = ", ".join(n for n, _ in apps[:4])
+                notes.append(("warn", f"{fmt_rate(other)} on {label.lower()} isn't going through DualLink"
+                                      + (f". Programs connecting over it directly: {who}." if who else ".")))
+
+        through = sorted(conns["through"].items(), key=lambda kv: -kv[1])
+        direct_any = {}
+        for per in conns["direct"].values():
+            for n, c in per.items():
+                direct_any[n] = direct_any.get(n, 0) + c
+        for name, c in through:
+            if direct_any.get(name):
+                notes.append(("warn", f"{name} sends {c} connection{'s' if c != 1 else ''} through DualLink but also "
+                                      f"connects directly {direct_any[name]} time{'s' if direct_any[name] != 1 else ''}, "
+                                      f"so part of its download isn't split."))
+        if self.proxy.refused_ipv6:
+            n = self.proxy.refused_ipv6
+            notes.append(("warn", f"DualLink couldn't make {n} IPv6 connection{'s' if n != 1 else ''} because neither of "
+                                  f"your connections has an IPv6 address right now. Apps often connect directly instead, "
+                                  f"so that traffic isn't split."))
+        if not self.running:
+            notes.insert(0, ("info", "DualLink is off, so nothing is being split. Turn it on and run the check while a "
+                                     "download is going."))
+        elif not through:
+            notes.insert(0, ("warn", f"No program is connected through DualLink right now. Check your download app's "
+                                     f"proxy setting (SOCKS5, 127.0.0.1, port {port})."))
+        if self.running and not any(k == "warn" for k, _ in notes):
+            notes.append(("good", "Everything matches: your downloads are going through DualLink."))
+        return {"ok": True, "seconds": round(dt, 1), "links": report_links,
+                "through": [{"name": n, "connections": c} for n, c in through],
+                "refused_ipv6": self.proxy.refused_ipv6, "failed": self.proxy.failed,
+                "notes": [{"kind": k, "text": t} for k, t in notes]}
 
     def shutdown(self):
         self.power_off()

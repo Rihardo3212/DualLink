@@ -166,6 +166,30 @@
   .result { font-size: 12.5px; margin-top: 8px; }
   .result.ok { color: var(--on); } .result.err { color: var(--bad); }
 
+  /* traffic check */
+  .modal { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -48%) scale(.98); opacity: 0; pointer-events: none;
+           width: min(640px, 94vw); max-height: 86vh; display: flex; flex-direction: column; background: var(--panel);
+           border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.45); transition: .2s; }
+  .modal.open { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%); }
+  .modal-head { display: flex; align-items: center; padding: 16px 18px 6px; } .modal-head h2 { margin: 0; font-size: 17px; flex: 1; }
+  .modal-body { overflow: auto; padding: 6px 18px 12px; }
+  .modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-top: 1px solid var(--line); font-size: 12px; }
+  .note { display: flex; gap: 10px; padding: 10px 12px; border-radius: 10px; margin: 8px 0; font-size: 13px; background: var(--panel-2); border: 1px solid var(--line); }
+  .note i { font-style: normal; font-weight: 700; flex: none; }
+  .note.warn { border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); } .note.warn i { color: var(--warn); }
+  .note.good { border-color: color-mix(in srgb, var(--on) 35%, var(--line)); } .note.good i { color: var(--on); }
+  .note.info i { color: var(--eth); }
+  .ck-h { margin: 16px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); font-weight: 600; }
+  .ck-apps { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ck-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .ck-table th { text-align: left; color: var(--faint); font-weight: 500; padding: 4px 6px; }
+  .ck-table td { padding: 7px 6px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; vertical-align: top; }
+  .ck-table td.num { text-align: right; } .ck-table td.bad { color: var(--warn); font-weight: 600; }
+  .ck-direct { color: var(--faint); font-size: 11.5px; margin-top: 2px; }
+  .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--eth);
+             animation: spin .8s linear infinite; display: inline-block; vertical-align: -4px; margin-right: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
   .toast { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 20px); opacity: 0; transition: .25s;
            background: var(--panel-2); border: 1px solid var(--line); padding: 10px 16px; border-radius: 11px;
            box-shadow: var(--shadow); max-width: 80%; font-size: 13px; pointer-events: none; }
@@ -190,6 +214,8 @@
       <div class="sub">Ethernet + phone hotspot for faster downloads</div>
     </div>
     <div class="spacer"></div>
+    <button class="btn" id="openCheck" title="See which programs use DualLink and where your traffic goes">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Traffic check</button>
     <button class="icon-btn" id="openSettings" title="Settings" aria-label="Settings">
       <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
@@ -366,6 +392,14 @@
     </div>
   </div>
 </aside>
+
+<div class="scrim" id="checkScrim"></div>
+<div class="modal" id="checkModal" role="dialog" aria-label="Traffic check">
+  <div class="modal-head"><h2>Traffic check</h2>
+    <button class="icon-btn" id="closeCheck" aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div class="modal-body" id="checkBody"></div>
+  <div class="modal-foot"><span class="muted" id="checkFoot"></span><button class="btn primary" id="rerunCheck">Check again</button></div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -591,6 +625,37 @@ function scheduleSave() {
     }
   }, 350);
 }
+function esc(t) { return String(t).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c])); }
+function openCheck(open) {
+  $("checkModal").classList.toggle("open", open); $("checkScrim").classList.toggle("open", open);
+  if (open) runCheck();
+}
+async function runCheck() {
+  $("rerunCheck").disabled = true;
+  $("checkBody").innerHTML = `<p style="color:var(--muted)"><span class="spinner"></span>Measuring for 3 seconds - keep your download running…</p>`;
+  $("checkFoot").textContent = "";
+  let r;
+  try { r = await api.traffic_check(); } finally { $("rerunCheck").disabled = false; }
+  if (!r.ok) { $("checkBody").innerHTML = `<div class="note info"><i>i</i><span>${esc(r.message)}</span></div>`; return; }
+  const icon = { warn: "!", good: "✓", info: "i" };
+  let h = r.notes.map((n) => `<div class="note ${n.kind}"><i>${icon[n.kind]}</i><span>${esc(n.text)}</span></div>`).join("");
+  h += `<div class="ck-h">Programs using DualLink</div>`;
+  h += r.through.length
+    ? `<div class="ck-apps">${r.through.map((a) => `<span class="chip good">${esc(a.name)} · ${a.connections}</span>`).join("")}</div>`
+    : `<p class="muted" style="margin:4px 0">None right now.</p>`;
+  h += `<div class="ck-h">Download traffic per connection</div><table class="ck-table"><tr><th>Connection</th><th style="text-align:right">Windows sees</th><th style="text-align:right">Through DualLink</th><th style="text-align:right">Around DualLink</th></tr>`;
+  for (const l of r.links) {
+    const other = l.other == null ? "-" : speedStr(l.other);
+    const bad = l.other != null && l.other > Math.max(256 * 1024, 0.15 * (l.windows || 0));
+    const direct = l.direct_apps.length ? `<div class="ck-direct">Connecting directly: ${l.direct_apps.map((a) => `${esc(a.name)} (${a.connections})`).join(", ")}</div>` : "";
+    h += `<tr><td><b>${esc(l.label)}</b> <span class="muted">${esc(l.adapter || "")}</span>${direct}</td>
+          <td class="num">${l.windows == null ? "-" : speedStr(l.windows)}</td><td class="num">${speedStr(l.dualink)}</td>
+          <td class="num ${bad ? "bad" : ""}">${other}</td></tr>`;
+  }
+  h += `</table>`;
+  $("checkBody").innerHTML = h;
+  $("checkFoot").textContent = `Measured over ${r.seconds} s with Windows' own counters. Small differences are normal.`;
+}
 function openSettings(open) {
   $("drawer").classList.toggle("open", open); $("scrim").classList.toggle("open", open);
 }
@@ -603,8 +668,11 @@ async function init() {
   document.querySelectorAll(".drawer input, .drawer select").forEach((el) =>
     el.addEventListener(el.type === "checkbox" || el.tagName === "SELECT" ? "change" : "input", scheduleSave));
   $("openSettings").onclick = () => openSettings(true);
+  $("openCheck").onclick = () => openCheck(true);
+  $("closeCheck").onclick = $("checkScrim").onclick = () => openCheck(false);
+  $("rerunCheck").onclick = runCheck;
   $("closeSettings").onclick = $("scrim").onclick = () => openSettings(false);
-  document.addEventListener("keydown", (e) => e.key === "Escape" && openSettings(false));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { openSettings(false); openCheck(false); } });
   $("refreshAdapters").onclick = async () => { const r = await api.refresh_adapters(); settings = r.settings; fillAdapters(r.adapters); toast("Connection list refreshed"); };
   $("showManual").onclick = () => $("manualSteps").classList.toggle("hidden");
   $("app_qbt").onchange = () => { $("s_qbt_auto").checked = $("app_qbt").checked; scheduleSave(); };

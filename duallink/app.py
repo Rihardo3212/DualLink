@@ -65,6 +65,9 @@ class Api:
     def test_qbt(self):
         return self._ctl.test_qbt()
 
+    def traffic_check(self):
+        return self._ctl.traffic_check()
+
     def copy(self, text):
         """Clipboard fallback for the setup steps (navigator.clipboard may be blocked for local pages)."""
         try:

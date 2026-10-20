@@ -126,4 +126,4 @@ def test_unplugged_choice_stays_in_the_list(tmp_path):
     ctl.cfg.update(eth_name="Ethernet", hot_name="Ethernet 2")
     items = ctl.adapters()
     assert ctl.cfg["hot_name"] == "Ethernet 2"                # not silently replaced
-    assert {"name": "Ethernet 2", "ip": "", "hotspot": False, "present": False} in items
+    assert {"name": "Ethernet 2", "ip": "", "ip6": "", "hotspot": False, "present": False} in items

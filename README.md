@@ -24,6 +24,9 @@ A single torrent or a single file therefore uses both internet connections.
 - **Follows your connections.** Adapters are remembered by name, so if your phone reconnects with a new
   IP, is unplugged, or comes back (even on another USB port), DualLink adapts within seconds. You can turn
   it on before plugging in the phone, and the hotspot joins automatically.
+- **Traffic check.** Shows which programs are connected through DualLink, which ones connect directly
+  around it, and how much traffic Windows sees on each connection compared with what DualLink carries.
+- **IPv4 and IPv6.** Apps that hand DualLink an IPv6 address are split over both links too.
 - Runs in the system tray, shows live speed graphs, and can start with Windows.
 
 ## Apps
@@ -71,6 +74,8 @@ Any other app with SOCKS5 proxy support can use DualLink the same way as FDM.
 | "qBittorrent: login needed" | Enter the Web UI username/password in Settings, or tick *Bypass authentication for clients on localhost*. |
 | Hotspot shows connections but stays at 0 B/s | In an admin PowerShell run `netsh interface ipv4 set interface "<hotspot adapter name>" weakhostsend=enabled`, then turn DualLink off and on. |
 | "qBittorrent: not reachable" even though the Web UI is ticked | qBittorrent's **IP address** field must be just `127.0.0.1` (or `*`), not a full `http://...` address. |
+| A download uses only one link | DualLink splits *connections*, and one connection can only use one link. Run **Traffic check** to see how many connections the app opened. In FDM, pause and resume the download, and check *Maximum number of connections per server* in Settings › Traffic Limits for the mode you're using. Some servers allow only one connection per file. |
+| Numbers don't match Task Manager | Run **Traffic check**: it lists programs that go around DualLink. |
 | FDM downloads fail | Make sure DualLink is running (tray icon). If you changed DualLink's proxy port, change it in FDM too. |
 | "Could not listen on port 1080" | Another program uses that port. Pick a different proxy port in Settings. |
 | Hotspot not in the list | Connect the phone first, then press **refresh the list** in Settings. A remembered but unplugged connection shows as *(not connected)*. |
