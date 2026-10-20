@@ -65,6 +65,15 @@ class Api:
     def test_qbt(self):
         return self._ctl.test_qbt()
 
+    def copy(self, text):
+        """Clipboard fallback for the setup steps (navigator.clipboard may be blocked for local pages)."""
+        try:
+            import subprocess
+            subprocess.run(["clip"], input=str(text).encode("ascii", "ignore"), check=True, creationflags=0x08000000)
+            return True
+        except Exception:
+            return False
+
 
 class DualLinkApp:
     def __init__(self, start_minimized=False):
@@ -74,7 +83,7 @@ class DualLinkApp:
         self.tray = None
         self.window = webview.create_window(
             "DualLink", resource("ui", "index.html"), js_api=self.api,
-            width=1000, height=780, min_size=(760, 640), hidden=start_minimized,
+            width=1000, height=860, min_size=(760, 640), hidden=start_minimized,
             background_color="#0e1015",
         )
         self.window.events.closing += self._on_closing

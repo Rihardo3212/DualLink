@@ -64,11 +64,34 @@
   .chip.good { color: var(--on); border-color: color-mix(in srgb, var(--on) 35%, var(--line)); }
   .chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
 
+  /* apps */
+  .apps { padding: 12px 18px 8px; }
+  .apps-head { display: flex; align-items: baseline; gap: 10px; font-size: 13px; margin-bottom: 4px; }
+  .apps-head span { color: var(--faint); font-size: 12px; }
+  .app-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); }
+  .apps-head + .app-row { border-top: 0; }
+  .app-badge { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; flex: none;
+               font-size: 11px; font-weight: 700; color: #fff; background: var(--b); letter-spacing: .3px; }
+  .app-text { flex: 1; min-width: 0; }
+  .app-name { font-weight: 600; font-size: 13.5px; }
+  .app-desc { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 35%, var(--line)); }
+  .steps { margin: 2px 0 8px 46px; padding: 10px 14px; border-radius: 11px; background: var(--panel-2); border: 1px solid var(--line);
+           font-size: 12.5px; color: var(--muted); }
+  .steps p { margin: 0 0 4px; } .steps ol { margin: 4px 0 6px; padding-left: 18px; } .steps li { margin: 3px 0; }
+  .steps b { color: var(--text); font-weight: 600; }
+  .steps code { color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px;
+                font: 12px ui-monospace, "Cascadia Mono", Consolas, monospace; user-select: text; }
+  .copy { border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 6px; padding: 1px 8px;
+          font-size: 11.5px; cursor: pointer; margin-left: 4px; }
+  .copy:hover { color: var(--text); border-color: var(--faint); }
+  .muted { color: var(--faint); }
+
   /* chart */
   .chart-card { padding: 14px 18px 10px; }
   .chart-head { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 12.5px; margin-bottom: 6px; }
   .legend span { margin-left: 14px; }
-  canvas { width: 100%; height: 150px; display: block; }
+  canvas { width: 100%; height: 130px; display: block; }
 
   /* link cards */
   .links { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
@@ -164,7 +187,7 @@
     </svg>
     <div>
       <div class="title">DualLink</div>
-      <div class="sub">Ethernet + phone hotspot for qBittorrent</div>
+      <div class="sub">Ethernet + phone hotspot for faster downloads</div>
     </div>
     <div class="spacer"></div>
     <button class="icon-btn" id="openSettings" title="Settings" aria-label="Settings">
@@ -184,7 +207,36 @@
         <span><i class="dot" style="background:var(--hot)"></i>Hotspot <b id="hotMini">0 B/s</b></span>
       </div>
     </div>
-    <div class="chip" id="qbtChip">qBittorrent: waiting</div>
+  </section>
+
+  <section class="card apps">
+    <div class="apps-head"><b>Apps</b><span>Switch on the apps you download with</span></div>
+    <div class="app-row">
+      <div class="app-badge" style="--b:#3c78d8">qB</div>
+      <div class="app-text"><div class="app-name">qBittorrent</div><div class="app-desc" id="qbtDesc"></div></div>
+      <span class="chip hidden" id="qbtChip"></span>
+      <label class="switch" title="Use DualLink with qBittorrent"><input type="checkbox" id="app_qbt"><span></span></label>
+    </div>
+    <div class="app-row">
+      <div class="app-badge" style="--b:#2aa36b">FDM</div>
+      <div class="app-text"><div class="app-name">Free Download Manager</div><div class="app-desc" id="fdmDesc"></div></div>
+      <button class="link-btn" id="fdmStepsBtn">Setup steps</button>
+      <span class="chip hidden" id="fdmChip"></span>
+      <label class="switch" title="Use DualLink with Free Download Manager"><input type="checkbox" id="app_fdm"><span></span></label>
+    </div>
+    <div class="steps hidden" id="fdmSteps">
+      <p>One-time setup - leave it like this afterwards:</p>
+      <ol>
+        <li>In Free Download Manager open the menu <b>☰ › Settings › Network</b></li>
+        <li>Choose manual proxy configuration with type <b>SOCKS5</b></li>
+        <li>Address <code>127.0.0.1</code> <button class="copy" data-copy="127.0.0.1">Copy</button>
+            &nbsp; Port <code id="fdmPort">1080</code> <button class="copy" id="fdmPortCopy" data-copy="1080">Copy</button></li>
+        <li>Optional: allow 8 or more connections per download, so one file can use both links</li>
+      </ol>
+      <p class="muted">While DualLink is off, FDM downloads go out over your normal connection. Keep DualLink
+        running in the tray - if it's closed, FDM can't download.
+        <button class="link-btn hidden" id="enableAutostart">Start DualLink with Windows</button></p>
+    </div>
   </section>
 
   <section class="card banner hidden" id="qbtBanner">
@@ -289,7 +341,7 @@
 
     <div class="section">
       <h4>qBittorrent</h4>
-      <label class="toggle"><span class="t-text">Set up qBittorrent automatically<small>Applies the proxy when on, restores your settings when off</small></span>
+      <label class="toggle"><span class="t-text">Use with qBittorrent<small>Applies the proxy when on, restores your settings when off</small></span>
         <span class="switch"><input type="checkbox" id="s_qbt_auto"><span></span></span></label>
       <div id="qbtFields">
         <div class="field"><label for="s_qbt_url">Web UI address</label><input type="text" id="s_qbt_url" spellcheck="false"></div>
@@ -319,7 +371,7 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
-let api = null, settings = {}, running = false, saveTimer = null;
+let api = null, settings = {}, running = false, saveTimer = null, savePending = false;
 
 // ---------- formatting ----------
 function fmtSpeed(b) {
@@ -420,7 +472,9 @@ function render(s) {
   $("ethMini").textContent = speedStr(s.links[0].speed);
   $("hotMini").textContent = speedStr(s.links[1].speed);
   const [ethOk, hotOk] = s.links.map((l) => l.present);
-  $("stateLabel").innerHTML = !running ? "<b>Off</b> · press the button to combine your connections"
+  $("stateLabel").innerHTML = !running ? (s.standby
+        ? "<b>Off</b> · downloads use your normal connection - press to combine"
+        : "<b>Off</b> · press the button to combine your connections")
     : ethOk && hotOk ? "<b>On</b> · combining Ethernet and hotspot"
     : ethOk ? "<b>On</b> · using Ethernet only - waiting for the hotspot"
     : "<b>On</b> · using the hotspot only - waiting for Ethernet";
@@ -428,13 +482,9 @@ function render(s) {
   setLink($("linkHot"), s.links[1], true);
   drawChart(s.links[0].history, s.links[1].history);
 
-  const chip = $("qbtChip"), st = s.qbt.state;
-  chip.className = "chip" + (st === "connected" ? " good" : (running && st !== "off" ? " warn" : ""));
-  chip.textContent = !running ? "qBittorrent: not in use"
-    : st === "connected" ? "✓ qBittorrent set up"
-    : st === "manual" ? "qBittorrent: manual setup"
-    : st === "auth" ? "qBittorrent: login needed" : "qBittorrent: not reachable";
-  const showBanner = running && (st === "unreachable" || st === "auth" || st === "error");
+  renderApps(s);
+  const st = s.qbt.state;
+  const showBanner = running && s.qbt_auto && (st === "unreachable" || st === "auth" || st === "error");
   $("qbtBanner").classList.toggle("hidden", !showBanner);
   if (showBanner) {
     const auth = st === "auth";
@@ -449,8 +499,36 @@ function render(s) {
     : "Fixed shares (automatic balancing off)";
   $("footRight").textContent = running
     ? `${s.dht ? "DHT connected · " : ""}Proxy running on 127.0.0.1:${s.port}`
-    : `Proxy port ${s.port}`;
+    : s.standby ? `Pass-through for FDM on 127.0.0.1:${s.port}` : `Proxy port ${s.port}`;
   $("restartNote").classList.toggle("hidden", !running);
+}
+
+function setChip(el, text, kind) {
+  el.classList.toggle("hidden", !text);
+  el.className = "chip" + (kind ? " " + kind : "") + (text ? "" : " hidden");
+  el.textContent = text || "";
+}
+function renderApps(s) {
+  if (!savePending) { $("app_qbt").checked = s.qbt_auto; $("app_fdm").checked = s.fdm; }
+  const st = s.qbt.state;
+  let qd, qc = null, qk = "";
+  if (!s.qbt_auto) qd = "Off - DualLink leaves qBittorrent's settings alone";
+  else if (!running) qd = "Ready - set up automatically when you turn DualLink on";
+  else if (st === "connected") { qd = "Set up automatically - restored when you turn DualLink off"; qc = "✓ Using DualLink"; qk = "good"; }
+  else if (st === "auth") { qd = "Enter the Web UI login in Settings"; qc = "Login needed"; qk = "warn"; }
+  else { qd = "Turn on qBittorrent's Web UI - see the steps below"; qc = "Not reachable"; qk = "warn"; }
+  $("qbtDesc").textContent = qd; setChip($("qbtChip"), qc, qk);
+
+  let fd, fc = null, fk = "";
+  if (!s.fdm) fd = "Off";
+  else if (s.standby_error) { fd = "Change the proxy port in Settings, then update FDM"; fc = "Port in use"; fk = "bad"; }
+  else if (running) { fd = "Spreads FDM downloads over both connections"; fc = "Active"; fk = "good"; }
+  else fd = "Ready - FDM downloads normally until you turn DualLink on";
+  $("fdmDesc").textContent = fd; setChip($("fdmChip"), fc, fk);
+  $("fdmStepsBtn").classList.toggle("hidden", !s.fdm);
+  if (!s.fdm) $("fdmSteps").classList.add("hidden");
+  $("fdmPort").textContent = s.port; $("fdmPortCopy").dataset.copy = s.port;
+  $("enableAutostart").classList.toggle("hidden", !!settings.autostart);
 }
 
 async function poll() {
@@ -477,7 +555,7 @@ function fillSettings() {
   $("s_auto").checked = s.auto; $("s_recycle").checked = s.recycle;
   $("s_share_eth").value = s.share_eth; $("s_share_hot").value = s.share_hot;
   $("s_quota").value = s.quota_mb; $("s_port").value = s.port;
-  $("s_qbt_auto").checked = s.qbt_auto; $("s_qbt_url").value = s.qbt_url;
+  $("s_qbt_auto").checked = s.qbt_auto; $("s_qbt_url").value = s.qbt_url; $("app_qbt").checked = s.qbt_auto; $("app_fdm").checked = s.fdm;
   $("s_qbt_user").value = s.qbt_user; $("s_qbt_pass").value = s.qbt_pass;
   $("s_reconnect").checked = s.reconnect; $("s_tray").checked = s.tray; $("s_autostart").checked = s.autostart;
   syncVisibility();
@@ -496,13 +574,16 @@ function collect() {
     qbt_auto: $("s_qbt_auto").checked, qbt_url: $("s_qbt_url").value.trim(),
     qbt_user: $("s_qbt_user").value, qbt_pass: $("s_qbt_pass").value,
     reconnect: $("s_reconnect").checked, tray: $("s_tray").checked, autostart: $("s_autostart").checked,
+    fdm: $("app_fdm").checked,
   };
 }
 function scheduleSave() {
   syncVisibility();
   clearTimeout(saveTimer);
+  savePending = true;
   saveTimer = setTimeout(async () => {
     const res = await api.save_settings(collect());
+    savePending = false;
     settings = res.settings;
     if (res.error) {
       toast(res.error, true);
@@ -526,6 +607,19 @@ async function init() {
   document.addEventListener("keydown", (e) => e.key === "Escape" && openSettings(false));
   $("refreshAdapters").onclick = async () => { const r = await api.refresh_adapters(); settings = r.settings; fillAdapters(r.adapters); toast("Connection list refreshed"); };
   $("showManual").onclick = () => $("manualSteps").classList.toggle("hidden");
+  $("app_qbt").onchange = () => { $("s_qbt_auto").checked = $("app_qbt").checked; scheduleSave(); };
+  $("app_fdm").onchange = () => {
+    if ($("app_fdm").checked) $("fdmSteps").classList.remove("hidden");   // show the one-time steps
+    scheduleSave();
+  };
+  $("fdmStepsBtn").onclick = () => $("fdmSteps").classList.toggle("hidden");
+  document.querySelectorAll(".copy").forEach((b) => b.onclick = async () => {
+    const text = b.dataset.copy;
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; } catch (e) { ok = await api.copy(text); }
+    toast(ok ? `Copied ${text}` : `Couldn't copy - type ${text}`, !ok);
+  });
+  $("enableAutostart").onclick = () => { $("s_autostart").checked = true; scheduleSave(); toast("DualLink will start with Windows"); $("enableAutostart").classList.add("hidden"); };
   $("retryQbt").onclick = async () => { const q = await api.retry_qbt(); toast(q.state === "connected" ? "qBittorrent set up" : q.message, q.state !== "connected"); };
   $("testQbt").onclick = async () => {
     clearTimeout(saveTimer); settings = (await api.save_settings(collect())).settings;

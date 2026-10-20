@@ -1,15 +1,16 @@
 <p align="center"><img src="docs/icon.png" width="96" alt="DualLink icon"></p>
 
 <h1 align="center">DualLink</h1>
-<p align="center">Download one torrent over your <b>Ethernet</b> and your <b>phone hotspot</b> at the same time.</p>
+<p align="center">Download over your <b>Ethernet</b> and your <b>phone hotspot</b> at the same time - in <b>qBittorrent</b> and <b>Free Download Manager</b>.</p>
 
 <p align="center"><img src="docs/screenshot.png" width="760" alt="DualLink window showing Ethernet and hotspot speeds combined"></p>
 
 ## How it works
 
-A torrent downloads from many peers at once. DualLink runs a small proxy on your PC.
-qBittorrent sends its peer connections through it, and DualLink sends each one out over
-either Ethernet or the hotspot. A single torrent therefore uses both internet connections.
+Downloads use many connections at once: a torrent talks to dozens of peers, and Free Download Manager
+splits a file into pieces that download in parallel. DualLink runs a small proxy on your PC; your download
+app sends its connections through it, and DualLink sends each one out over either Ethernet or the hotspot.
+A single torrent or a single file therefore uses both internet connections.
 
 - **Picks the faster connection automatically.** DualLink measures the download speed per connection
   on each link every few seconds and sends more new peers to the faster one. The slower link always keeps
@@ -24,6 +25,17 @@ either Ethernet or the hotspot. A single torrent therefore uses both internet co
   IP, is unplugged, or comes back (even on another USB port), DualLink adapts within seconds. You can turn
   it on before plugging in the phone, and the hotspot joins automatically.
 - Runs in the system tray, shows live speed graphs, and can start with Windows.
+
+## Apps
+
+Switch apps on in DualLink's **Apps** card.
+
+| App | Setup |
+|---|---|
+| **qBittorrent** | Automatic. DualLink applies the proxy when you turn it on and restores your settings when you turn it off. Needs qBittorrent's Web UI (see below). |
+| **Free Download Manager** | Once: in FDM open **☰ › Settings › Network**, choose manual proxy configuration, type **SOCKS5**, address `127.0.0.1`, port `1080`. Leave it like that. While DualLink is off it passes FDM's downloads through over your normal connection, and when it's on, each file's pieces are spread over both links. Keep DualLink running (tray / Start with Windows); if it's closed, FDM can't download. |
+
+Any other app with SOCKS5 proxy support can use DualLink the same way as FDM.
 
 ## Install
 
@@ -48,6 +60,8 @@ either Ethernet or the hotspot. A single torrent therefore uses both internet co
   Ethernet (or the hotspot if Ethernet is unavailable), so qBittorrent finds as many peers as without DualLink.
   The footer shows "DHT connected" once qBittorrent is using it.
 - More peers means a better split: DualLink raises qBittorrent's connection limits to at least 500 / 200 per torrent.
+- **FDM and websites:** a file is only spread over both links if the server allows split downloads. Some file
+  hosts tie a download link to one IP address and may refuse the hotspot's pieces; for those, switch DualLink off.
 
 ## Troubleshooting
 
@@ -57,6 +71,7 @@ either Ethernet or the hotspot. A single torrent therefore uses both internet co
 | "qBittorrent: login needed" | Enter the Web UI username/password in Settings, or tick *Bypass authentication for clients on localhost*. |
 | Hotspot shows connections but stays at 0 B/s | In an admin PowerShell run `netsh interface ipv4 set interface "<hotspot adapter name>" weakhostsend=enabled`, then turn DualLink off and on. |
 | "qBittorrent: not reachable" even though the Web UI is ticked | qBittorrent's **IP address** field must be just `127.0.0.1` (or `*`), not a full `http://...` address. |
+| FDM downloads fail | Make sure DualLink is running (tray icon). If you changed DualLink's proxy port, change it in FDM too. |
 | "Could not listen on port 1080" | Another program uses that port. Pick a different proxy port in Settings. |
 | Hotspot not in the list | Connect the phone first, then press **refresh the list** in Settings. A remembered but unplugged connection shows as *(not connected)*. |
 

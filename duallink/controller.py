@@ -31,6 +31,7 @@ DEFAULTS = {
     "tray": True, "autostart": False,
     "qbt_saved": None,     # original qBittorrent settings while DualLink is on (crash recovery)
     "tray_hint_shown": False,
+    "fdm": False,          # Free Download Manager stays pointed at the proxy -> keep it up in pass-through when off
 }
 
 
@@ -82,6 +83,8 @@ class Controller:
         self._sampler = threading.Thread(target=self._sample_loop, daemon=True)
         self._sampler.start()
         threading.Thread(target=self._watch_loop, daemon=True).start()
+        self.standby_error = None
+        self.ensure_standby()
         if self.cfg.get("qbt_saved"):   # DualLink was not shut down cleanly last time
             threading.Thread(target=self._restore_leftover, daemon=True).start()
 
@@ -119,6 +122,8 @@ class Controller:
                 self.cfg[k] = max(0.1, float(self.cfg.get(k) or 1))
             self.save()
             self._apply_live_settings()
+        if "fdm" in new or "port" in new:
+            self.ensure_standby()
         if self.running and ("eth_name" in new or "hot_name" in new):
             self.check_adapters()          # switch connections right away
         return self.public_settings()
@@ -234,9 +239,15 @@ class Controller:
             self._quota_warned = False
             self._last = [(0, time.time()), (0, time.time())]
             try:
-                self.proxy.start(self.cfg["port"])
+                if self.proxy_up() and self.proxy.port != self.cfg["port"] and self.cfg["port"]:
+                    self.proxy.stop()                 # standby proxy on an old port
+                if self.proxy_up():
+                    self.proxy.close_link(self.proxy.direct)   # FDM reconnects its pieces over both links
+                else:
+                    self.proxy.start(self.cfg["port"])
             except Exception as e:  # noqa: BLE001
                 return {"ok": False, "message": str(e)}
+            self.proxy.passthrough = False
             self.running = True
 
         if note:
@@ -244,9 +255,29 @@ class Controller:
         if self.cfg["qbt_auto"]:
             self._qbt_apply()
         else:
-            self.qbt_state = {"state": "manual", "message": "Automatic qBittorrent setup is off."}
+            self.qbt_state = {"state": "disabled", "message": ""}
         self.on_change()
         return {"ok": True, "message": note} if note else {"ok": True}
+
+    # ---- pass-through standby (for apps that stay pointed at the proxy) ----- #
+    def proxy_up(self):
+        return bool(self.proxy.loop and self.proxy.loop.is_running())
+
+    def ensure_standby(self):
+        """While off: keep the proxy up in pass-through mode if FDM is used, otherwise keep it down."""
+        with self._lock:
+            if self.running:
+                return
+            want = bool(self.cfg.get("fdm"))
+            if self.proxy_up() and (not want or (self.cfg["port"] and self.proxy.port != self.cfg["port"])):
+                self.proxy.stop()
+            if want and not self.proxy_up():
+                self.proxy.passthrough = True
+                try:
+                    self.proxy.start(self.cfg["port"])
+                    self.standby_error = None
+                except Exception as e:  # noqa: BLE001
+                    self.standby_error = str(e)
 
     def _qbt_apply(self):
         try:
@@ -276,7 +307,10 @@ class Controller:
                     q.reconnect(q.downloading_hashes())
             except QbtError:
                 pass  # will be retried at next start
-        self.proxy.stop()
+        if self.cfg.get("fdm"):
+            self.proxy.passthrough = True      # Free Download Manager keeps working over the normal route
+        else:
+            self.proxy.stop()
         self.qbt_state = {"state": "off", "message": ""}
         self.on_change()
         return {"ok": True}
@@ -374,10 +408,15 @@ class Controller:
             "port": self.proxy.port if self.running else self.cfg["port"],
             "qbt": self.qbt_state,
             "auto": bool(self.cfg["auto"]),
+            "fdm": bool(self.cfg.get("fdm")),
+            "qbt_auto": bool(self.cfg.get("qbt_auto")),
+            "standby": (not self.running) and self.proxy_up(),
+            "standby_error": self.standby_error,
         }
 
     def shutdown(self):
         self.power_off()
+        self.proxy.stop()      # quitting the app: nothing left to pass through
 
 
 # ---- Start with Windows ---------------------------------------------------- #

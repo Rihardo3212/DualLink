@@ -112,7 +112,7 @@ class _UdpAssociation:
         t = self.out.get(key)
         if t is None:
             t, _ = await self.loop.create_datagram_endpoint(
-                lambda: _RemoteSide(self, link), local_addr=(link.ip, 0))
+                lambda: _RemoteSide(self, link), local_addr=(link.ip or "0.0.0.0", 0))
             self.out[key] = t
         return t
 
@@ -211,10 +211,16 @@ class BalancingProxy:
         self.conns = set()
         self.moved = 0
         self.udp_assocs = 0       # open UDP associations (qBittorrent's DHT / UDP trackers)
+        # Pass-through: DualLink is "off" but apps like Free Download Manager stay pointed at the proxy,
+        # so connections go out normally (Windows picks the route) instead of failing.
+        self.passthrough = False
+        self.direct = Link("Direct")
         self.udp_packets = 0
 
     # -- link choice -------------------------------------------------------- #
     def order(self):
+        if self.passthrough:
+            return [self.direct]
         usable = [l for l in self.links if l.usable()]
         return sorted(usable, key=lambda l: (l.active + l.pending + 1) / max(l.weight, 0.01))
 
@@ -306,7 +312,7 @@ class BalancingProxy:
                 self._update_weights()
                 now = time.monotonic()
                 best = self.preferred()
-                if not (self.auto and self.recycle and best) or now - last_move < self.MOVE_EVERY:
+                if self.passthrough or not (self.auto and self.recycle and best) or now - last_move < self.MOVE_EVERY:
                     continue
                 idle = [c for c in self.conns
                         if c.link is not best and now - c.started > self.MIN_AGE
@@ -397,7 +403,8 @@ class BalancingProxy:
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 s.setblocking(False)
                 try:
-                    s.bind((cand.ip, 0))
+                    if cand.ip:              # the "Direct" pass-through link isn't bound
+                        s.bind((cand.ip, 0))
                     await asyncio.wait_for(loop.sock_connect(s, dest), 10)
                     sock, link = s, cand
                 except Exception:
@@ -434,6 +441,8 @@ class BalancingProxy:
     # -- SOCKS5 UDP ASSOCIATE (DHT, UDP trackers) ------------------------------ #
     def udp_link(self):
         """UDP is many tiny packets: keep it on the first link (Ethernet) to save mobile data."""
+        if self.passthrough:
+            return self.direct
         return next((l for l in self.links if l.usable()), None)
 
     async def _udp_associate(self, reader, writer):
