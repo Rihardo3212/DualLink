@@ -136,7 +136,13 @@ class Controller:
         self.standby_error = None
         self._hot_present = None                  # for "turn on when the hotspot connects"
         self._last_learn = time.monotonic()
-        self.update = None                        # {"version", "url", "installer"} when a newer release exists
+        self.update = None                        # details of a newer release, when there is one
+        self.update_state = {"phase": "idle", "done": 0, "total": 0, "message": ""}
+        self.just_updated = False
+        self.quit_app = lambda: None              # set by the GUI: close DualLink so the update can install
+        from . import updates as _u
+        self.install_kind_fn, self.update_download = _u.install_kind, _u.download
+        self.update_installer, self.update_portable = _u.run_installer, _u.swap_portable
         self._update_notified = None
         self.speedtest_url = None                 # override for tests
         self.speedtest_seconds = 5.0
@@ -495,6 +501,37 @@ class Controller:
             self.notify(f"DualLink {self.update['version']} is available", "Open DualLink to download it.")
         return {"ok": True, "update": self.update}
 
+    def start_update(self):
+        """Download the new version, check it, switch off safely, install and restart."""
+        if self.update_state["phase"] in ("downloading", "installing"):
+            return {"ok": True}
+        if not self.update:
+            return {"ok": False, "message": "There's no update to install."}
+        kind = self.install_kind_fn()
+        if kind == "source":
+            return {"ok": False, "message": "You're running DualLink from source - update with git pull instead."}
+        asset = (self.update.get("assets") or {}).get("installer" if kind == "installed" else "portable")
+        if not asset or not asset.get("url"):
+            return {"ok": False, "message": "This release has no file for your kind of install - use the download page."}
+        self.update_state = {"phase": "downloading", "done": 0, "total": asset.get("size", 0), "message": ""}
+        threading.Thread(target=self._run_update, args=(kind, asset), daemon=True).start()
+        return {"ok": True}
+
+    def _run_update(self, kind, asset):
+        try:
+            def progress(done, total):
+                self.update_state.update(done=done, total=total)
+            path = self.update_download(asset, progress=progress)
+            self.update_state.update(phase="installing")
+            self.power_off()                      # gives qBittorrent its own settings back first
+            if kind == "installed":
+                self.update_installer(path)       # the installer starts the new version when done
+            else:
+                self.update_portable(path)        # swaps DualLink.exe and starts the new one
+            self.quit_app()
+        except Exception as e:  # noqa: BLE001
+            self.update_state = {"phase": "error", "done": 0, "total": 0, "message": str(e)}
+
     def start_update_checks(self, first_delay=10, every=12 * 3600):
         def loop():
             time.sleep(first_delay)
@@ -700,6 +737,8 @@ class Controller:
             "apps": {k: bool(self.cfg.get(k)) for k in MANUAL_APPS},
             "speedtest": self.speedtest_state,
             "update": self.update,
+            "update_state": self.update_state,
+            "just_updated": self.just_updated,
             "version": __version__,
             "qbt_auto": bool(self.cfg.get("qbt_auto")),
             "standby": (not self.running) and self.proxy_up(),

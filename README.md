@@ -32,7 +32,8 @@ A single torrent or a single file therefore uses both internet connections.
 - **Turns on by itself.** When your phone's hotspot connects, DualLink switches on (optional: also when it starts).
 - **Speed test.** Measures each connection on its own, and DualLink uses the result to favour the faster one.
 - **Remembers which link is faster** between sessions, so balancing is right from the first second.
-- **Update notifications** from this repository's Releases page.
+- **In-app updates.** When a new release is published, DualLink shows what's new and updates itself with one
+  click: it downloads and checks the new version, switches off safely, installs it and starts again.
 - **Traffic check.** Shows which programs are connected through DualLink, which ones connect directly
   around it, and how much traffic Windows sees on each connection compared with what DualLink carries.
 - **IPv4 and IPv6.** Apps that hand DualLink an IPv6 address are split over both links too.

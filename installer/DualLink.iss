@@ -25,6 +25,7 @@ SolidCompression=yes
 WizardStyle=modern
 ; close a running DualLink before replacing it during an update
 CloseApplications=force
+RestartApplications=no
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
@@ -42,6 +43,8 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\DualLink.exe"; Description: "{cm:LaunchProgram,DualLink}"; Flags: nowait postinstall skipifsilent
+; in-app updates run this installer silently with /update=1 - start the new version afterwards
+Filename: "{app}\DualLink.exe"; Parameters: "--updated"; Flags: nowait; Check: IsInAppUpdate
 
 [UninstallRun]
 ; stop DualLink, then give qBittorrent its own settings back if DualLink was on
@@ -49,6 +52,11 @@ Filename: "{sys}\taskkill.exe"; Parameters: "/f /im DualLink.exe"; Flags: runhid
 Filename: "{app}\DualLink.exe"; Parameters: "--cleanup"; Flags: runhidden waituntilterminated; RunOnceId: "CleanupDualLink"
 
 [Code]
+function IsInAppUpdate: Boolean;
+begin
+  Result := ExpandConstant('{param:update|0}') = '1';
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usPostUninstall then

@@ -35,7 +35,7 @@ def test_three_links_share_connections(tmp_path):
         st = ctl.status()["links"]
         assert [l["name"] for l in st] == ["Ethernet", "Hotspot", "Wi-Fi"]
         assert [l["kind"] for l in st] == ["eth", "hot", "extra"]
-        assert [l["connections"] for l in st] == [3, 3, 3]
+        assert wait_for(lambda: [l["connections"] for l in ctl.status()["links"]] == [3, 3, 3])
         for c in conns:
             c.close()
     finally:

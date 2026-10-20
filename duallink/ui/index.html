@@ -99,6 +99,11 @@
   .sp-total { margin-top: 10px; padding: 12px 14px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); font-size: 13px; }
   .sp-total b { font-size: 18px; }
 
+  .notes { max-height: 170px; overflow: auto; white-space: pre-wrap; font-size: 12.5px; color: var(--muted); background: var(--panel-2);
+           border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 8px 0 4px; user-select: text; }
+  .up-prog { margin-top: 12px; } .up-prog .sp-bar i { background: var(--eth); }
+  .up-text { font-size: 12.5px; color: var(--muted); margin-top: 6px; } .up-text.err { color: var(--bad); }
+
   /* switch */
   .switch { position: relative; width: 38px; height: 22px; flex: none; cursor: pointer; }
   .switch input { opacity: 0; width: 0; height: 0; }
@@ -484,6 +489,8 @@ function render(s) {
   $("restartNote").classList.toggle("hidden", !running);
   if (modalKind === "qbt") refreshQbtSteps();
   if (modalKind === "speed") renderSpeed(s.speedtest);
+  if (modalKind === "update") renderUpdate(s);
+  if (s.just_updated && !shownUpdated) { shownUpdated = true; toast(`DualLink is updated to ${s.version}`); }
   $("updateBtn").classList.toggle("hidden", !s.update);
   if (s.update) $("updateBtn").textContent = `Update to ${s.update.version}`;
   $("verText").textContent = `DualLink ${s.version}`;
@@ -689,6 +696,49 @@ function openMoreApps() {
   }));
 }
 
+// ---------- in-app update ----------
+let shownUpdated = false;
+const cleanNotes = (t) => t.replace(/^#+\s*/gm, "").replace(/\*\*/g, "").replace(/^\s*[*-] /gm, "• ")
+  .replace(/ by @\S+ in https:\/\/\S+/g, "").replace(/^Full Changelog:.*$/gm, "").trim();
+function openUpdate() {
+  const u = last && last.update; if (!u) return;
+  openModal("update", "Update DualLink", `
+    <p style="margin:2px 0 6px">Version <b>${esc(u.version)}</b> is available - you have ${esc(last.version || "")}.</p>
+    ${u.notes ? `<div class="notes">${esc(cleanNotes(u.notes))}</div>` : ""}
+    <p class="tip">DualLink downloads the update, switches itself off (qBittorrent gets its own settings back), installs it and starts again. It takes about a minute.</p>
+    <div class="up-prog hidden" id="upProg"><div class="sp-bar"><i id="upBar" style="width:0%"></i></div><div class="up-text" id="upText"></div></div>`,
+    `<button class="link-btn" id="upPage" style="font-size:12.5px">Open download page</button>
+     <span><button class="btn" id="upLater">Later</button> <button class="btn primary" id="upNow">Update now</button></span>`);
+  $("upLater").onclick = closeModal;
+  $("upPage").onclick = () => { api.open_url(u.url); };
+  $("upNow").onclick = async () => {
+    $("upNow").disabled = true;
+    const r = await api.start_update();
+    if (!r.ok) { $("upNow").disabled = false; $("upProg").classList.remove("hidden"); $("upText").textContent = r.message; $("upText").className = "up-text err"; }
+  };
+  if (last) renderUpdate(last);
+}
+function renderUpdate(s) {
+  const st = s.update_state || { phase: "idle" };
+  if (st.phase === "idle") return;
+  $("upProg").classList.remove("hidden");
+  const busy = st.phase === "downloading" || st.phase === "installing";
+  $("upNow").disabled = busy; $("upLater").disabled = busy;
+  if (st.phase === "downloading") {
+    const pct = st.total ? Math.min(100, (100 * st.done) / st.total) : 0;
+    $("upBar").style.width = `${pct}%`;
+    $("upText").textContent = st.total ? `Downloading… ${sizeStr(st.done)} of ${sizeStr(st.total)}` : `Downloading… ${sizeStr(st.done)}`;
+    $("upText").className = "up-text";
+  } else if (st.phase === "installing") {
+    $("upBar").style.width = "100%";
+    $("upText").textContent = "Installing - DualLink will close and start again in a moment.";
+    $("upText").className = "up-text";
+  } else if (st.phase === "error") {
+    $("upText").textContent = st.message; $("upText").className = "up-text err";
+    $("upNow").textContent = "Try again";
+  }
+}
+
 // ---------- speed test ----------
 let spSig = "";
 function openSpeedTest() {
@@ -778,15 +828,13 @@ async function init() {
   buildApps();
   $("moreApps").onclick = openMoreApps;
   $("openSpeed").onclick = openSpeedTest;
-  $("updateBtn").onclick = async () => {
-    const u = last && last.update; if (!u) return;
-    await api.open_url(u.installer || u.url);
-    toast(u.installer ? `Downloading the DualLink ${u.version} installer…` : `Opening the DualLink ${u.version} download page…`);
-  };
+  $("updateBtn").onclick = openUpdate;
   $("checkNow").onclick = async () => {
     $("checkNow").disabled = true;
     const r = await api.check_updates(); $("checkNow").disabled = false;
-    if (!r.ok) toast(r.message, true); else toast(r.update ? `DualLink ${r.update.version} is available` : "You have the latest version");
+    if (!r.ok) toast(r.message, true);
+    else if (r.update) { openSettings(false); last = Object.assign(last || {}, { update: r.update }); openUpdate(); }
+    else toast("You have the latest version");
   };
   $("power").onclick = async () => {
     const p = $("power"); p.classList.add("busy");

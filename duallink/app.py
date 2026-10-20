@@ -71,6 +71,9 @@ class Api:
     def check_updates(self):
         return self._ctl.check_updates_now()
 
+    def start_update(self):
+        return self._ctl.start_update()
+
     def open_url(self, url):
         if not str(url).startswith("https://github.com/"):
             return False                  # only ever open our own release pages
@@ -92,7 +95,7 @@ class Api:
 
 
 class DualLinkApp:
-    def __init__(self, start_minimized=False):
+    def __init__(self, start_minimized=False, updated=False):
         self.ctl = Controller()
         self.api = Api(self.ctl)
         self.quitting = False
@@ -105,6 +108,8 @@ class DualLinkApp:
         self.window.events.closing += self._on_closing
         self.ctl.notify = self._notify
         self.ctl.on_change = self._refresh_tray
+        self.ctl.quit_app = self._quit_for_update
+        self.ctl.just_updated = updated
 
     # ---- tray ---------------------------------------------------------------- #
     def _start_tray(self):
@@ -182,6 +187,21 @@ class DualLinkApp:
                          "It's in the system tray. Right-click the icon to quit.")
         return False  # keep running in the tray
 
+    def _quit_for_update(self):
+        """Close completely so the installer can replace DualLink.exe (the new version starts by itself)."""
+        import os
+        import time
+        self.quitting = True
+        try:
+            self.ctl.proxy.stop()
+            if self.tray:
+                self.tray.stop()
+            self.window.destroy()
+        except Exception:
+            pass
+        time.sleep(0.5)
+        os._exit(0)
+
     def quit(self):
         self.quitting = True
         self.ctl.shutdown()
@@ -190,7 +210,12 @@ class DualLinkApp:
         self.window.destroy()
 
     def run(self):
+        from .instance import listen_for_show
+        listen_for_show(self.show)                # starting DualLink again shows this window
         self._start_tray()
+        if self.ctl.just_updated:
+            from . import __version__
+            self._notify("DualLink updated", f"You're now on version {__version__}.")
         threading.Thread(target=self.ctl.startup, daemon=True).start()   # "turn on when DualLink starts"
         self.ctl.start_update_checks()
         webview.start()
