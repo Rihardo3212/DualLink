@@ -24,6 +24,11 @@ A single torrent or a single file therefore uses both internet connections.
 - **Follows your connections.** Adapters are remembered by name, so if your phone reconnects with a new
   IP, is unplugged, or comes back (even on another USB port), DualLink adapts within seconds. You can turn
   it on before plugging in the phone, and the hotspot joins automatically.
+- **More than two connections.** Add up to two extra connections (Wi-Fi, a second phone, ...) in
+  Settings › Connections; DualLink balances across all of them.
+- **Live app status.** The Apps list shows which apps are connected through DualLink right now
+  ("✓ 9 connections now") and remembers apps that have worked before, so you can see a setup is right
+  without testing.
 - **Turns on by itself.** When your phone's hotspot connects, DualLink switches on (optional: also when it starts).
 - **Speed test.** Measures each connection on its own, and DualLink uses the result to favour the faster one.
 - **Remembers which link is faster** between sessions, so balancing is right from the first second.

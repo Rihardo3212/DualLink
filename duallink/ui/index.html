@@ -8,7 +8,7 @@
   :root {
     --bg: #0e1015; --panel: #161921; --panel-2: #1d212b; --line: #272c38;
     --text: #e9ecf2; --muted: #8b93a5; --faint: #5d6476;
-    --eth: #4d8dff; --hot: #ff9b3d; --on: #2fd67b; --warn: #ffc84d; --bad: #ff5d6c;
+    --eth: #4d8dff; --hot: #ff9b3d; --x1: #a78bfa; --x2: #2dd4bf; --on: #2fd67b; --warn: #ffc84d; --bad: #ff5d6c;
     --shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 8px 24px rgba(0,0,0,.25);
   }
   @media (prefers-color-scheme: light) {
@@ -59,7 +59,7 @@
   .speed { font-size: 42px; font-weight: 650; letter-spacing: -1px; line-height: 1.1; font-variant-numeric: tabular-nums; }
   .speed small { font-size: 17px; font-weight: 500; color: var(--muted); letter-spacing: 0; margin-left: 4px; }
   canvas { width: 100%; height: 110px; display: block; margin-top: 14px; }
-  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-top: 12px; }
   .tile { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 12px; background: var(--panel-2);
           border: 1px solid var(--line); min-width: 0; }
   .tile .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
@@ -81,7 +81,7 @@
   .app-main { flex: 1; min-width: 0; }
   .app-name { font-weight: 600; font-size: 13.5px; }
   .app-status { font-size: 12px; color: var(--muted); }
-  .app-status.good { color: var(--on); } .app-status.warn { color: var(--warn); } .app-status.bad { color: var(--bad); }
+  .app-status.good { color: var(--on); } .app-status.idle { color: color-mix(in srgb, var(--on) 55%, var(--muted)); } .app-status.warn { color: var(--warn); } .app-status.bad { color: var(--bad); }
 
   .more-row { border-top: 1px solid var(--line); padding: 10px 0 12px; font-size: 13px; }
   .btn.update { background: color-mix(in srgb, var(--on) 16%, var(--panel)); border-color: color-mix(in srgb, var(--on) 45%, var(--line)); color: var(--on); }
@@ -129,6 +129,8 @@
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .toggle { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 7px 0; cursor: pointer; }
   .toggle small { display: block; color: var(--faint); font-size: 11.5px; }
+  .extra-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .extra-row select { flex: 1; }
   .restart-note { font-size: 12px; color: var(--warn); margin: 2px 0 6px; }
 
   .modal { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -48%) scale(.98); opacity: 0; pointer-events: none;
@@ -219,19 +221,7 @@
       </div>
     </div>
     <canvas id="chart"></canvas>
-    <div class="tiles">
-      <div class="tile" id="tileEth" style="--c:var(--eth)">
-        <i class="dot"></i>
-        <div class="t-main"><div class="t-name">Ethernet</div><div class="t-sub" data-k="sub">-</div></div>
-        <div class="t-speed" data-k="speed">-</div>
-      </div>
-      <div class="tile" id="tileHot" style="--c:var(--hot)">
-        <i class="dot"></i>
-        <div class="t-main"><div class="t-name">Phone hotspot</div><div class="t-sub" data-k="sub">-</div>
-          <div class="bar hidden" data-k="bar"><i data-k="barFill"></i></div></div>
-        <div class="t-speed" data-k="speed">-</div>
-      </div>
-    </div>
+    <div class="tiles" id="tiles"></div>
   </section>
 
   <section class="card apps">
@@ -253,6 +243,9 @@
       <div class="field"><label for="s_eth">Ethernet (home internet)</label><select id="s_eth"></select></div>
       <div class="field"><label for="s_hot">Phone hotspot</label><select id="s_hot"></select>
         <div class="hint">Not listed? Connect your phone, then <button class="link-btn" id="refreshAdapters">refresh the list</button>.</div></div>
+      <div id="extraList"></div>
+      <button class="link-btn" id="addExtra" style="font-size:13px">+ Add another connection</button>
+      <div class="hint">For example Wi-Fi or a second phone. Up to two extra connections.</div>
     </div>
     <div class="section">
       <h4>Balancing</h4>
@@ -341,12 +334,14 @@ function niceMax(v) {
   for (const s of [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]) if (s * p >= v * 1.1) return s >= 1000 ? 1024 * p : s * p;
   return v * 1.2;
 }
-function drawChart(eth, hot) {
+function drawChart(series) {
   const c = $("chart"), dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
   if (c.width !== w * dpr || c.height !== h * dpr) { c.width = w * dpr; c.height = h * dpr; }
   const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
-  const n = eth.length, top = 6, bottom = h - 4, right = w - 58;
-  const total = eth.map((v, i) => v + hot[i]), max = niceMax(Math.max(...total, 0));
+  const n = series[0].length, top = 6, bottom = h - 4, right = w - 58;
+  const stacks = []; let acc = series[0].map(() => 0);
+  for (const sr of series) { const next = acc.map((v, i) => v + sr[i]); stacks.push([acc, next]); acc = next; }
+  const total = acc, max = niceMax(Math.max(...total, 0));
   const x = (i) => right * (i / (n - 1)), y = (v) => bottom - (bottom - top) * (v / max);
   g.strokeStyle = css("--line"); g.fillStyle = css("--faint"); g.font = "11px Segoe UI, sans-serif"; g.lineWidth = 1;
   for (let k = 0; k <= 2; k++) {
@@ -364,28 +359,41 @@ function drawChart(eth, hot) {
     g.beginPath(); g.moveTo(x(0), y(upper[0])); for (let i = 1; i < n; i++) g.lineTo(x(i), y(upper[i]));
     g.strokeStyle = color; g.lineWidth = 1.8; g.stroke();
   };
-  area(eth.map(() => 0), eth, css("--eth"));
-  area(eth, total, css("--hot"));
+  stacks.forEach(([lower, upper], i) => area(lower, upper, css(LINK_COLORS[i])));
 }
 
 // ---------- status ----------
-function renderTile(el, l, isHot) {
-  const q = (k) => el.querySelector(`[data-k="${k}"]`);
-  const name = l.adapter || (isHot ? settings.hot_name : settings.eth_name);
-  const waiting = running && !l.present;
-  el.classList.toggle("waiting", waiting);
-  q("speed").textContent = running ? speedStr(l.speed) : "-";
-  let sub;
-  if (!name) sub = "Not chosen - pick it in Settings";
-  else if (waiting) sub = `${name} isn't connected - joins automatically`;
-  else if (!running) sub = name;
-  else sub = `${plural(l.connections, "connection")}${l.over_quota ? " · data limit reached" : ""}`;
-  q("sub").textContent = sub;
-  if (isHot) {
-    const used = l.down + l.up, show = running && l.quota > 0;
-    q("bar").classList.toggle("hidden", !show);
-    if (show) { q("barFill").style.width = `${Math.min(100, (100 * used) / l.quota)}%`; q("sub").textContent += ` · ${sizeStr(used)} of ${sizeStr(l.quota)}`; }
+const LINK_COLORS = ["--eth", "--hot", "--x1", "--x2"];
+let tileSig = "";
+function renderTiles(s) {
+  const sig = s.links.map((l) => l.name).join("|");
+  if (sig !== tileSig) {
+    tileSig = sig;
+    $("tiles").innerHTML = s.links.map((l, i) => `
+      <div class="tile" style="--c:var(${LINK_COLORS[i]})" data-i="${i}">
+        <i class="dot"></i>
+        <div class="t-main"><div class="t-name">${l.kind === "hot" ? "Phone hotspot" : esc(l.name)}</div><div class="t-sub" data-k="sub">-</div>
+          ${l.kind === "hot" ? `<div class="bar hidden" data-k="bar"><i data-k="barFill"></i></div>` : ""}</div>
+        <div class="t-speed" data-k="speed">-</div>
+      </div>`).join("");
   }
+  s.links.forEach((l, i) => {
+    const el = $("tiles").querySelector(`[data-i="${i}"]`), q = (k) => el.querySelector(`[data-k="${k}"]`);
+    const waiting = running && !l.present;
+    el.classList.toggle("waiting", waiting);
+    q("speed").textContent = running ? speedStr(l.speed) : "-";
+    let sub;
+    if (!l.adapter) sub = "Not chosen - pick it in Settings";
+    else if (waiting) sub = "Not connected · joins automatically";
+    else if (!running) sub = l.adapter;
+    else sub = `${plural(l.connections, "connection")}${l.over_quota ? " · data limit reached" : ""}`;
+    q("sub").textContent = sub;
+    if (l.kind === "hot") {
+      const used = l.down + l.up, show = running && l.quota > 0;
+      q("bar").classList.toggle("hidden", !show);
+      if (show) { q("barFill").style.width = `${Math.min(100, (100 * used) / l.quota)}%`; q("sub").textContent += ` · ${sizeStr(used)} of ${sizeStr(l.quota)}`; }
+    }
+  });
 }
 
 const APPS = [
@@ -399,8 +407,18 @@ const APPS = [
 const settingKey = (key) => (key === "qbt" ? "qbt_auto" : key);
 const appOn = (key) => !!settings[settingKey(key)];
 
+function liveOf(key) { return ((last && last.app_live) || {})[key] || { connections: 0, programs: [] }; }
+function shownApps() {
+  return APPS.filter((a) => a.key === "qbt" || a.key === "fdm" || appOn(a.key) || liveOf(a.key).connections > 0);
+}
+let appSig = "";
+function ago(ts) {
+  const m = Math.max(0, Math.round((Date.now() / 1000 - ts) / 60));
+  return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 48 * 60 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`;
+}
 function buildApps() {
-  const shown = APPS.filter((a) => a.key === "qbt" || a.key === "fdm" || appOn(a.key));
+  const shown = shownApps();
+  appSig = shown.map((a) => a.key).join(",");
   $("appRows").innerHTML = shown.map((a) => `
     <div class="app-row" data-app="${a.key}">
       <div class="badge" style="--b:${a.color}">${esc(a.badge)}</div>
@@ -422,21 +440,28 @@ function setApp(key, on) {
   if (!on && key !== "qbt" && key !== "fdm") setTimeout(buildApps, 400);   // extra apps leave the list when switched off
 }
 function renderApps(s) {
+  if (shownApps().map((a) => a.key).join(",") !== appSig) return buildApps();
   const st = s.qbt.state;
   $("appRows").querySelectorAll(".app-row").forEach((row) => {
     const key = row.dataset.app, sw = row.querySelector('[data-k="sw"]'), btn = row.querySelector('[data-k="setup"]');
     const on = key === "qbt" ? s.qbt_auto : !!(s.apps || {})[key];
     if (!savePending) sw.checked = on;
+    const live = (s.app_live || {})[key] || { connections: 0, programs: [] }, n = live.connections;
+    const seen = (s.seen_apps || {})[key], app = APPS.find((a) => a.key === key);
+    const who = key === "other" && live.programs.length ? `${live.programs.slice(0, 3).join(", ")} · ` : "";
     let t = "Off", k = "", fix = false;
     if (key === "qbt" && on) {
       if (!running) t = "Ready - set up automatically when DualLink is on";
-      else if (st === "connected") { t = "✓ Connected"; k = "good"; }
+      else if (st === "connected") { t = n ? `✓ Connected · ${plural(n, "connection")} now` : "✓ Connected · no transfers right now"; k = "good"; }
       else if (st === "auth") { t = "Login needed"; k = "warn"; fix = true; }
       else { t = "Can't reach qBittorrent - needs setup"; k = "warn"; fix = true; }
     } else if (on) {
       if (s.standby_error) { t = "Proxy port is in use - change it in Settings"; k = "bad"; }
-      else if (running) { t = "✓ Active"; k = "good"; }
-      else t = "Ready - downloads pass straight through while DualLink is off";
+      else if (n) { t = running ? `✓ ${who}${plural(n, "connection")} now` : `✓ ${who}${who ? "p" : "Working - p"}assing straight through while DualLink is off`; k = "good"; }
+      else if (seen) { t = `✓ Set up · idle (last used ${ago(seen)})`; k = "idle"; }
+      else t = `Not seen yet - start a download in ${app.name === "Other app" ? "the app" : app.name} to check the setup`;
+    } else if (n && key !== "qbt") {
+      t = `${who}Using DualLink - switch on so it keeps working while DualLink is off`; k = "warn";
     }
     const status = row.querySelector('[data-k="status"]');
     status.textContent = t; status.className = "app-status " + k;
@@ -448,13 +473,13 @@ function render(s) {
   last = s; running = s.running;
   $("power").classList.toggle("on", running);
   const c = fmtSpeed(s.combined); $("combined").innerHTML = `${c.n}<small>${c.u}</small>`;
-  const [ethOk, hotOk] = s.links.map((l) => l.present);
+  const lbl = (l) => (l.kind === "hot" ? "hotspot" : l.kind === "eth" ? "Ethernet" : l.name);
+  const up = s.links.filter((l) => l.present), down = s.links.filter((l) => !l.present);
   $("state").innerHTML = !running ? "<b>Off</b> · press the button to combine your connections"
-    : ethOk && hotOk ? "<b>On</b> · using Ethernet and hotspot together"
-    : ethOk ? "<b>On</b> · Ethernet only - waiting for the hotspot" : "<b>On</b> · hotspot only - waiting for Ethernet";
-  renderTile($("tileEth"), s.links[0], false);
-  renderTile($("tileHot"), s.links[1], true);
-  drawChart(s.links[0].history, s.links[1].history);
+    : !down.length ? (s.links.length === 2 ? "<b>On</b> · using Ethernet and hotspot together" : `<b>On</b> · using ${s.links.length} connections together`)
+    : `<b>On</b> · using ${esc(up.map(lbl).join(" + ") || "nothing")} - waiting for ${esc(down.map(lbl).join(" and "))}`;
+  renderTiles(s);
+  drawChart(s.links.map((l) => l.history));
   renderApps(s);
   $("restartNote").classList.toggle("hidden", !running);
   if (modalKind === "qbt") refreshQbtSteps();
@@ -469,7 +494,25 @@ async function poll() {
 }
 
 // ---------- settings ----------
+let adapterList = [];
+function fillExtras() {
+  const extra = settings.extra || [];
+  $("extraList").innerHTML = extra.map((name, i) => `
+    <div class="extra-row"><select data-x="${i}">${adapterList.map((a) =>
+      `<option value="${esc(a.name)}" ${a.name === name ? "selected" : ""}>${esc(a.present ? `${a.name} - ${a.ip}` : `${a.name} (not connected)`)}</option>`).join("")}</select>
+      <button class="icon-btn" data-rm="${i}" title="Remove this connection" aria-label="Remove">✕</button></div>`).join("");
+  $("extraList").querySelectorAll("select").forEach((sel) => (sel.onchange = () => {
+    const ex = [...(settings.extra || [])]; ex[+sel.dataset.x] = sel.value; save({ extra: ex });
+  }));
+  $("extraList").querySelectorAll("[data-rm]").forEach((b) => (b.onclick = () => {
+    const ex = [...(settings.extra || [])]; ex.splice(+b.dataset.rm, 1); save({ extra: ex }); fillExtras();
+  }));
+  const used = new Set([settings.eth_name, settings.hot_name, ...extra]);
+  const free = adapterList.filter((a) => a.present && !used.has(a.name));
+  $("addExtra").classList.toggle("hidden", extra.length >= 2 || !free.length);
+}
 function fillAdapters(list) {
+  adapterList = list;
   for (const [sel, key] of [["s_eth", "eth_name"], ["s_hot", "hot_name"]]) {
     const el = $(sel); el.innerHTML = "";
     if (!list.length) el.innerHTML = "<option value=''>No connections found</option>";
@@ -481,6 +524,7 @@ function fillAdapters(list) {
     }
     el.value = settings[key] || "";
   }
+  fillExtras();
 }
 function fillSettings() {
   const s = settings;
@@ -501,7 +545,7 @@ function save(patch) {                       // merge a change into the settings
   saveTimer = setTimeout(async () => {
     const res = await api.save_settings(settings);
     savePending = false; settings = res.settings;
-    if (res.error) { toast(res.error, true); $("s_eth").value = settings.eth_name; $("s_hot").value = settings.hot_name; }
+    if (res.error) { toast(res.error, true); $("s_eth").value = settings.eth_name; $("s_hot").value = settings.hot_name; fillExtras(); }
   }, 300);
 }
 async function saveNow(patch) {
@@ -662,14 +706,15 @@ function renderSpeed(st) {
   const sig = JSON.stringify(st); if (sig === spSig) return; spSig = sig;
   const res = st && st.result;
   if (st && st.running) {
-    $("mBody").innerHTML = `<p style="color:var(--muted)"><span class="spinner"></span>Testing ${esc(st.phase || "")}… about 10 seconds in total.</p>`;
+    $("mBody").innerHTML = `<p style="color:var(--muted)"><span class="spinner"></span>Testing ${esc(st.phase || "")}… about 5 seconds per connection.</p>`;
     $("spStart").disabled = true; $("spFoot").textContent = ""; return;
   }
   $("spStart").disabled = false;
   let h = `<p class="tip" style="margin:4px 0 10px;color:var(--muted)">Measures how fast each connection can download on its own, one after the other.
     For accurate results, pause big downloads first. The hotspot part uses a few dozen MB of mobile data.</p>`;
   if (res) {
-    const rows = [["Ethernet", "var(--eth)", res.eth], ["Hotspot", "var(--hot)", res.hot]];
+    const list = res.links || [res.eth, res.hot].filter(Boolean).map((r, i) => Object.assign({ label: ["Ethernet", "Hotspot"][i] }, r));
+    const rows = list.map((r, i) => [r.label, `var(${LINK_COLORS[i]})`, r]);
     const max = Math.max(1, ...rows.map((r) => (r[2] && r[2].bps) || 0));
     h += rows.map(([label, color, r]) => {
       const bps = (r && r.bps) || 0, err = r && r.error;
@@ -677,7 +722,7 @@ function renderSpeed(st) {
         <div class="sp-bar"><i style="width:${(100 * bps) / max}%"></i></div>
         <div class="sp-val">${err ? `<span class="sp-err">${esc(err)}</span>` : `${mbps(bps).toFixed(0)} Mbps<small>${speedStr(bps)}</small>`}</div></div>`;
     }).join("");
-    const total = ((res.eth && res.eth.bps) || 0) + ((res.hot && res.hot.bps) || 0);
+    const total = list.reduce((sum, r) => sum + (r.bps || 0), 0);
     h += `<div class="sp-total">Together: up to <b>${mbps(total).toFixed(0)} Mbps</b> <span class="muted">(${speedStr(total)})</span><br>
       <span class="muted">DualLink uses these results to favour the faster connection from the start.</span></div>`;
     $("spFoot").textContent = `Tested ${new Date(res.ts * 1000).toLocaleString()}`;
@@ -723,6 +768,12 @@ async function init() {
   $("openCheck").onclick = openTrafficCheck;
   $("mClose").onclick = $("mScrim").onclick = closeModal;
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") { openSettings(false); closeModal(); } });
+  $("addExtra").onclick = () => {
+    const used = new Set([settings.eth_name, settings.hot_name, ...(settings.extra || [])]);
+    const pick = adapterList.find((a) => a.present && !used.has(a.name));
+    if (!pick) return toast("No other connection found - connect it, then refresh the list", true);
+    save({ extra: [...(settings.extra || []), pick.name] }); fillExtras();
+  };
   $("refreshAdapters").onclick = async () => { const r = await api.refresh_adapters(); settings = r.settings; fillAdapters(r.adapters); toast("Connection list refreshed"); };
   buildApps();
   $("moreApps").onclick = openMoreApps;
@@ -747,7 +798,7 @@ async function init() {
       render(await api.status());
     } finally { p.classList.remove("busy"); }
   };
-  window.addEventListener("resize", () => last && drawChart(last.links[0].history, last.links[1].history));
+  window.addEventListener("resize", () => last && drawChart(last.links.map((l) => l.history)));
   if (!settings.eth_name || !settings.hot_name) openSettings(true);
   poll();
 }

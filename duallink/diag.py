@@ -129,3 +129,23 @@ def summarize(rows, names, adapters, proxy_port, own_pid):
             per = direct.setdefault(ip_to_adapter[lip], {})
             per[prog] = per.get(prog, 0) + 1
     return {"through": through, "direct": direct}
+
+
+# ---- live app status: which programs are connected to DualLink right now ------------ #
+_names = {}
+
+
+def proxy_clients(proxy_port, own_pid):
+    """{program_name: connections} for programs connected to DualLink's port (Windows only)."""
+    if os.name != "nt":
+        return {}
+    rows = parse_netstat(_run(["netstat", "-ano", "-p", "TCP"]) + "\n" + _run(["netstat", "-ano", "-p", "TCPv6"]))
+    mine = [pid for _l, _lp, rip, rport, pid in rows
+            if rip in ("127.0.0.1", "::1") and rport == str(proxy_port) and pid not in (own_pid, 0, 4)]
+    if any(pid not in _names for pid in mine):           # only run tasklist when a new program shows up
+        _names.update(parse_tasklist(_run(["tasklist", "/fo", "csv", "/nh"])))
+    counts = {}
+    for pid in mine:
+        name = _names.get(pid, f"PID {pid}")
+        counts[name] = counts.get(name, 0) + 1
+    return counts

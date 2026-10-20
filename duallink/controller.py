@@ -22,6 +22,7 @@ PHONE_RANGES = ("172.20.10.", "192.168.42.", "192.168.43.")
 
 DEFAULTS = {
     "eth_name": "", "hot_name": "",      # adapters are remembered by name - their IP may change
+    "extra": [],                         # up to MAX_EXTRA more adapters (Wi-Fi, a second phone, ...)
     "eth_ip": "", "hot_ip": "",          # last known addresses (display + migration from 1.0/1.1)
     "auto": True, "recycle": True,
     "share_eth": 1.0, "share_hot": 1.0,
@@ -39,11 +40,32 @@ DEFAULTS = {
     "check_updates": True,
     "learned": {},             # adapter name -> {"per_conn": bytes/s per connection, "ts": epoch} (internal)
     "speedtest": None,         # last speed test result (internal)
+    "seen_apps": {},           # app key -> last time it was seen connected to DualLink (internal)
 }
 
 
 MANUAL_APPS = ("fdm", "jd", "idm", "firefox", "other")
-INTERNAL_KEYS = ("qbt_saved", "learned", "speedtest")
+INTERNAL_KEYS = ("qbt_saved", "learned", "speedtest", "seen_apps")
+MAX_EXTRA = 2
+APP_KEYS = ("qbt",) + MANUAL_APPS
+APP_PROCESSES = {           # program names (lower case) -> app
+    "qbt": ("qbittorrent.exe",),
+    "fdm": ("fdm.exe",),
+    "jd": ("jdownloader2.exe", "jdownloader.exe", "javaw.exe", "java.exe"),
+    "idm": ("idman.exe",),
+    "firefox": ("firefox.exe",),
+}
+
+
+def classify_clients(counts):
+    """{program: connections} -> {app_key: {"connections": n, "programs": [...]}} (unknown programs -> "other")."""
+    live = {k: {"connections": 0, "programs": []} for k in APP_KEYS}
+    for name, c in counts.items():
+        key = next((k for k, procs in APP_PROCESSES.items() if name.lower() in procs), "other")
+        live[key]["connections"] += c
+        if name not in live[key]["programs"]:
+            live[key]["programs"].append(name)
+    return live
 LEARNED_MAX_AGE = 30 * 24 * 3600     # forget remembered speeds after 30 days
 
 
@@ -102,6 +124,11 @@ class Controller:
         self._speed = [0.0, 0.0]
         self._last = [(0, time.time()), (0, time.time())]
         self._quota_warned = False
+        self._sync_links()
+        self.app_live = {}                        # live app status (who is connected to DualLink right now)
+        self.app_every = 5.0
+        self.app_probe = None                     # override for tests; default: diag.proxy_clients
+        threading.Thread(target=self._app_loop, daemon=True).start()
         self.watch_every = 3.0                     # seconds between adapter checks while running
         self._sampler = threading.Thread(target=self._sample_loop, daemon=True)
         self._sampler.start()
@@ -144,6 +171,12 @@ class Controller:
         hot = new.get("hot_name", self.cfg["hot_name"])
         if eth and eth == hot:
             raise SettingsError("Ethernet and hotspot must be two different connections.")
+        if "extra" in new:
+            new["extra"] = [n for n in (new["extra"] or []) if isinstance(n, str) and n][:MAX_EXTRA]
+        extra = new.get("extra", self.extra_names())
+        names = [n for n in [eth, hot] + list(extra) if n]
+        if len(names) != len(set(names)):
+            raise SettingsError("Each connection can only be used once.")
         with self._lock:
             for k, v in (new or {}).items():
                 if k in allowed:
@@ -157,7 +190,9 @@ class Controller:
             self._apply_live_settings()
         if "port" in new or any(k in new for k in MANUAL_APPS):
             self.ensure_standby()
-        if self.running and ("eth_name" in new or "hot_name" in new):
+        if "extra" in new:
+            self._sync_links()
+        if self.running and ("eth_name" in new or "hot_name" in new or "extra" in new):
             self.check_adapters()          # switch connections right away
         return self.public_settings()
 
@@ -170,6 +205,40 @@ class Controller:
         self.links[1].quota_bytes = int(float(self.cfg["quota_mb"]) * 1024 * 1024)
         if not self.links[1].over_quota():
             self._quota_warned = False
+
+    # ---- links: Ethernet, Hotspot, then up to MAX_EXTRA extra connections ---------- #
+    def extra_names(self):
+        return [n for n in (self.cfg.get("extra") or []) if n][:MAX_EXTRA]
+
+    def link_names(self):
+        return [self.cfg["eth_name"], self.cfg["hot_name"]] + self.extra_names()
+
+    def link_labels(self):
+        return ["Ethernet", "Hotspot"] + self.extra_names()
+
+    def _sync_links(self):
+        """Make self.links match the configured connections (the proxy shares this list, so edit in place)."""
+        with self._lock:
+            extras = self.extra_names()
+            while len(self.links) > 2 + len(extras):
+                gone = self.links.pop()
+                self.proxy.close_link(gone)
+                self._hist.pop(); self._speed.pop(); self._last.pop()
+            while len(self.links) < 2 + len(extras):
+                self.links.append(Link(""))
+                self._hist.append(deque([0.0] * HISTORY, maxlen=HISTORY))
+                self._speed.append(0.0)
+                self._last.append((0, time.time()))
+            for l, name in zip(self.links[2:], extras):
+                if l.name != name:                # a different adapter now uses this slot
+                    if l.ip:
+                        self.proxy.close_link(l)
+                    l.name, l.ip, l.ip6 = name, "", ""
+                    l.down = l.up = l.udp_bytes = 0
+                    l.rate = l.per_conn = 0.0
+                    l._last_down = 0
+                    l.measured_at = -1e9
+                    l.weight = 1.0
 
     # ---- adapters ---------------------------------------------------------- #
     def _scan(self):
@@ -218,7 +287,7 @@ class Controller:
                 if ip:
                     self.cfg[f"{key}_ip"] = ip
         out = [dict(a, present=True) for a in items]
-        for name in (eth, hot):          # keep an unplugged choice visible in the list
+        for name in [eth, hot] + self.extra_names():   # keep an unplugged choice visible in the list
             if name and not any(a["name"] == name for a in items):
                 out.append({"name": name, "ip": "", "ip6": "", "hotspot": False, "present": False})
         return out
@@ -258,7 +327,8 @@ class Controller:
             if eth == hot:
                 return {"ok": False, "message": "Ethernet and hotspot must be two different connections."}
             items = self._scan()
-            ips = [self._ip_of(items, eth), self._ip_of(items, hot)]
+            names = self.link_names()
+            ips = [self._ip_of(items, n) for n in names]
             if not any(ips):
                 return {"ok": False, "message": "Neither connection is available right now. "
                                                 "Check that Ethernet or your phone is connected."}
@@ -267,7 +337,7 @@ class Controller:
                 note = f"{eth} isn't connected - DualLink is using the hotspot and will add Ethernet when it's back."
             elif not ips[1]:
                 note = f"{hot} isn't connected yet - DualLink will add the hotspot automatically when it appears."
-            for l, ip, name in zip(self.links, ips, (eth, hot)):
+            for l, ip, name in zip(self.links, ips, names):
                 l.ip = ip
                 l.ip6 = self._ip6_of(items, name)
                 l.down = l.up = l.failures = l.udp_bytes = 0
@@ -281,7 +351,7 @@ class Controller:
             self.proxy.moved = 0
             self.proxy.refused_ipv6 = self.proxy.failed = 0
             self._quota_warned = False
-            self._last = [(0, time.time()), (0, time.time())]
+            self._last[:] = [(0, time.time()) for _ in self.links]
             try:
                 if self.proxy_up() and self.proxy.port != self.cfg["port"] and self.cfg["port"]:
                     self.proxy.stop()                 # standby proxy on an old port
@@ -303,13 +373,44 @@ class Controller:
         self.on_change()
         return {"ok": True, "message": note} if note else {"ok": True}
 
+    # ---- live app status --------------------------------------------------------- #
+    def check_apps(self):
+        """Which apps are connected to DualLink right now; remembers when each was last seen working."""
+        if not self.proxy_up():
+            self.app_live = {}
+            return
+        probe = self.app_probe
+        if probe is None:
+            from .diag import proxy_clients as probe
+        live = classify_clients(probe(self.proxy.port, os.getpid()) or {})
+        self.app_live = live
+        seen = dict(self.cfg.get("seen_apps") or {})
+        newly = [k for k, v in live.items() if v["connections"] and k not in seen]
+        for k, v in live.items():
+            if v["connections"]:
+                seen[k] = time.time()
+        self.cfg["seen_apps"] = seen
+        if newly or time.monotonic() - getattr(self, "_seen_saved", 0) > 300:
+            self._seen_saved = time.monotonic()
+            self.save()
+
+    def _app_loop(self):
+        last = 0.0
+        while True:
+            time.sleep(0.2)
+            if time.monotonic() - last >= self.app_every:
+                last = time.monotonic()
+                try:
+                    self.check_apps()
+                except Exception:
+                    pass
+
     # ---- remembered speeds ------------------------------------------------------ #
     def remember_speeds(self):
         """Store each link's measured speed per connection, so the next session starts with it."""
         now_m, changed = time.monotonic(), False
         learned = dict(self.cfg.get("learned") or {})
-        for key, l in (("eth", self.links[0]), ("hot", self.links[1])):
-            name = self.cfg[f"{key}_name"]
+        for l, name in zip(self.links, self.link_names()):
             if name and l.per_conn > 0 and now_m - l.measured_at < 60:
                 learned[name] = {"per_conn": l.per_conn, "ts": time.time()}
                 changed = True
@@ -319,14 +420,15 @@ class Controller:
 
     def _seed_values(self):
         """[eth, hot] speeds to start balancing with (remembered or from the last speed test), or None."""
-        now, names = time.time(), (self.cfg["eth_name"], self.cfg["hot_name"])
+        now, names = time.time(), self.link_names()
         learned = self.cfg.get("learned") or {}
         vals = [learned.get(n) for n in names]
         if all(v and now - v.get("ts", 0) < LEARNED_MAX_AGE and v.get("per_conn", 0) > 0 for v in vals):
             return [v["per_conn"] for v in vals]
         st = self.cfg.get("speedtest") or {}
-        if now - st.get("ts", 0) < LEARNED_MAX_AGE and st.get("eth_name") == names[0] and st.get("hot_name") == names[1]:
-            vals = [(st.get("eth") or {}).get("bps", 0), (st.get("hot") or {}).get("bps", 0)]
+        if now - st.get("ts", 0) < LEARNED_MAX_AGE:
+            tested = {r.get("name"): r.get("bps", 0) for r in st.get("links", [])}
+            vals = [tested.get(n, 0) for n in names]
             if all(v > 0 for v in vals):
                 return vals
         return None
@@ -347,29 +449,31 @@ class Controller:
         if self.speedtest_state["running"]:
             return {"ok": True}
         items = self._scan()
-        names = (self.cfg["eth_name"], self.cfg["hot_name"])
+        names, labels = self.link_names(), self.link_labels()
         ips = [self._ip_of(items, n) for n in names]
         if not any(ips):
-            return {"ok": False, "message": "Neither connection is available right now."}
+            return {"ok": False, "message": "None of your connections is available right now."}
         self.speedtest_state = {"running": True, "phase": "", "result": None}
-        threading.Thread(target=self._run_speed_test, args=(names, ips), daemon=True).start()
+        threading.Thread(target=self._run_speed_test, args=(names, labels, ips), daemon=True).start()
         return {"ok": True}
 
-    def _run_speed_test(self, names, ips):
+    def _run_speed_test(self, names, labels, ips):
         from . import speedtest
-        result = {"ts": time.time(), "eth_name": names[0], "hot_name": names[1]}
-        for key, label, ip in (("eth", "Ethernet", ips[0]), ("hot", "Hotspot", ips[1])):
+        result = {"ts": time.time(), "links": []}
+        for name, label, ip in zip(names, labels, ips):
             self.speedtest_state["phase"] = label
             if not ip:
-                result[key] = {"bps": 0, "error": f"{label} isn't connected."}
-                continue
-            kw = {"seconds": self.speedtest_seconds}
-            if self.speedtest_url:
-                kw["url"] = self.speedtest_url
-            try:
-                result[key] = speedtest.measure(ip, **kw)
-            except Exception as e:  # noqa: BLE001
-                result[key] = {"bps": 0, "error": str(e)}
+                r = {"bps": 0, "error": f"{label} isn't connected."}
+            else:
+                kw = {"seconds": self.speedtest_seconds}
+                if self.speedtest_url:
+                    kw["url"] = self.speedtest_url
+                try:
+                    r = speedtest.measure(ip, **kw)
+                except Exception as e:  # noqa: BLE001
+                    r = {"bps": 0, "error": str(e)}
+            result["links"].append(dict(r, name=name, label=label))
+        result["eth"], result["hot"] = result["links"][0], result["links"][1]
         self.cfg["speedtest"] = result
         self.save()
         if self.running and all(time.monotonic() - l.measured_at > 60 for l in self.links):
@@ -507,14 +611,15 @@ class Controller:
         """Follow IP changes, unplugging and re-plugging of both connections."""
         items = self._scan()
         changed = False
-        for key, link, label in (("eth", self.links[0], "Ethernet"), ("hot", self.links[1], "Hotspot")):
-            name = self.cfg[f"{key}_name"]
+        names, labels = self.link_names(), self.link_labels()
+        for i, (link, name, label) in enumerate(zip(list(self.links), names, labels)):
+            key = ("eth", "hot")[i] if i < 2 else None
             ip = self._ip_of(items, name)
             link.ip6 = self._ip6_of(items, name) if ip else ""
             if not ip and key == "hot":
                 # the phone may come back as a differently-named adapter (another USB port, Wi-Fi instead of USB)
-                other = self.cfg["eth_name"]
-                cand = next((a for a in items if a["ip"].startswith(PHONE_RANGES) and a["name"] != other), None)
+                others = [n for j, n in enumerate(names) if j != 1]
+                cand = next((a for a in items if a["ip"].startswith(PHONE_RANGES) and a["name"] not in others), None)
                 if cand:
                     self.cfg["hot_name"], ip = cand["name"], cand["ip"]
                     link.ip6 = cand["ip6"]
@@ -524,17 +629,18 @@ class Controller:
             old, link.ip = link.ip, ip
             if old:
                 self.proxy.close_link(link)          # its connections are dead or on the old address
+            shown = label if i < 2 else f"{label} connection"
             if not ip:
-                self.notify(f"{label} disconnected",
-                            f"Downloads continue over the other connection. DualLink will add {label.lower()} "
-                            f"back automatically when it reconnects.")
+                self.notify(f"{shown} disconnected",
+                            f"Downloads continue over the other connections. DualLink will add it back "
+                            f"automatically when it reconnects.")
             elif not old:
                 link.measured_at = -1e9              # treat as unknown again: fair share until measured
-                self.notify(f"{label} connected", f"DualLink is using {self.cfg[f'{key}_name']} again ({ip}).")
+                self.notify(f"{shown} connected", f"DualLink is using {name} ({ip}).")
             else:
                 link.measured_at = -1e9
-                self.notify(f"{label} got a new address", f"DualLink switched to {ip} automatically.")
-            if ip:
+                self.notify(f"{shown} got a new address", f"DualLink switched to {ip} automatically.")
+            if ip and key:
                 self.cfg[f"{key}_ip"] = ip
             changed = True
         self._hot_present = bool(self.links[1].ip)
@@ -547,7 +653,9 @@ class Controller:
         while True:
             time.sleep(1.0)
             now = time.time()
-            for i, l in enumerate(self.links):
+            for i, l in enumerate(list(self.links)):
+                if i >= len(self._last):
+                    break
                 prev, t0 = self._last[i]
                 sp = max(0.0, (l.down - prev) / max(now - t0, 0.001)) if self.running else 0.0
                 self._last[i] = (l.down, now)
@@ -566,10 +674,11 @@ class Controller:
         usable = [l for l in self.links if l.usable()]
         wsum = sum(l.weight for l in usable) or 1.0
         out = []
-        for i, l in enumerate(self.links):
+        names, labels = self.link_names(), self.link_labels()
+        for i, l in enumerate(list(self.links)[:len(names)]):
             out.append({
-                "name": l.name, "ip": l.ip, "connections": l.active,
-                "adapter": self.cfg["eth_name" if i == 0 else "hot_name"],
+                "name": labels[i], "ip": l.ip, "connections": l.active,
+                "adapter": names[i], "kind": ("eth", "hot")[i] if i < 2 else "extra",
                 "present": bool(l.ip) or not self.running,
                 "share": round(100 * l.weight / wsum) if (self.running and l.usable()) else 0,
                 "speed": self._speed[i], "down": l.down, "up": l.up,
@@ -579,6 +688,8 @@ class Controller:
         return {
             "running": self.running,
             "combined": sum(self._speed),
+            "app_live": self.app_live,
+            "seen_apps": dict(self.cfg.get("seen_apps") or {}),
             "links": out,
             "moved": self.proxy.moved,
             "dht": self.running and self.proxy.udp_assocs > 0,
@@ -612,19 +723,18 @@ class Controller:
             return {"ok": False, "message": "The traffic check needs Windows."}
 
         report_links, notes = [], []
-        for i, (key, label) in enumerate((("eth", "Ethernet"), ("hot", "Hotspot"))):
-            adapter = self.cfg[f"{key}_name"]
+        for i, (adapter, label) in enumerate(zip(self.link_names(), self.link_labels())):
             windows = None
             if adapter in rx0 and adapter in rx1 and rx1[adapter] >= rx0[adapter]:
                 windows = (rx1[adapter] - rx0[adapter]) / dt
-            mine = (d1[i] - d0[i]) / dt if self.running else 0.0
+            mine = (d1[i] - d0[i]) / dt if (self.running and i < min(len(d0), len(d1))) else 0.0
             other = None if windows is None else max(0.0, windows - mine * 1.05)   # ~5% protocol overhead
             apps = sorted(conns["direct"].get(adapter, {}).items(), key=lambda kv: -kv[1])
             report_links.append({"label": label, "adapter": adapter, "windows": windows, "dualink": mine,
                                  "other": other, "direct_apps": [{"name": n, "connections": c} for n, c in apps]})
             if other is not None and other > max(256 * 1024, 0.15 * (windows or 0)):
                 who = ", ".join(n for n, _ in apps[:4])
-                notes.append(("warn", f"{fmt_rate(other)} on {label.lower()} isn't going through DualLink"
+                notes.append(("warn", f"{fmt_rate(other)} on {label if i >= 2 else label.lower()} isn't going through DualLink"
                                       + (f". Programs connecting over it directly: {who}." if who else ".")))
 
         through = sorted(conns["through"].items(), key=lambda kv: -kv[1])
