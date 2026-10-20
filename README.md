@@ -37,9 +37,10 @@ A single torrent or a single file therefore uses both internet connections.
 - **Traffic check.** Shows which programs are connected through DualLink, which ones connect directly
   around it, and how much traffic Windows sees on each connection compared with what DualLink carries.
 - **IPv4 and IPv6.** Apps that hand DualLink an IPv6 address are split over both links too.
-- **Light on your PC.** At ~14 MiB/s over 80 connections the proxy uses about 10 % of one CPU core and can
-  relay over 1 GiB/s; network information comes straight from Windows (no helper programs started in the
-  background), and the window stops updating while it's hidden.
+- **Light on your PC.** While DualLink sits in the tray only its small engine runs (about 20-25 MB of memory).
+  The window is a separate process that exists only while it's open; closing it gives its memory back.
+  At ~14 MiB/s over 80 connections the proxy uses about 10 % of one CPU core and can relay over 1 GiB/s, and
+  network information comes straight from Windows (no helper programs started in the background).
 - Runs in the system tray, shows live speed graphs, and can start with Windows.
 
 ## Apps
@@ -117,22 +118,39 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-## Project layout
+## How it's put together
+
+DualLink runs as two processes from the same `DualLink.exe`:
+
+- **The engine** (`DualLink.exe`, or `--minimized` when it starts with Windows) does all the work: the proxy,
+  balancing, qBittorrent set-up, notifications and the tray icon. It never loads the window's libraries.
+- **The window** (`DualLink.exe --window`) is started by the engine when you open DualLink and ends when you
+  close it. It shows the interface and asks the engine for everything over a small local API
+  (`127.0.0.1` only, with a random port and a secret token written to `%APPDATA%\DualLink\engine.json`;
+  requests from web pages are refused).
 
 ```
-main.py                    entry point
+main.py                    entry point (engine, --window, --cleanup)
+duallink/service.py        the engine: wires everything together, opens/closes the window
+duallink/api.py            the local control API (server in the engine, client in the window)
+duallink/window.py         the window process (pywebview)
+duallink/tray.py           tray icon straight from the Windows API (pystray as fallback)
 duallink/engine.py         SOCKS5 proxy + automatic balancing (no dependencies)
+duallink/controller.py     settings, on/off, statistics, start-with-Windows
 duallink/qbt.py            qBittorrent Web UI setup/restore
 duallink/speedtest.py      per-link speed test
 duallink/updates.py        update check against GitHub Releases
 duallink/diag.py           traffic check and live app status
 duallink/winapi.py         adapters, TCP connections and program names straight from Windows
-installer/DualLink.iss     Windows installer script
-duallink/controller.py     settings, on/off, statistics, start-with-Windows
-duallink/app.py            window (pywebview) + system tray (pystray)
+duallink/instance.py       one engine and one window at a time
 duallink/ui/index.html     the interface
+duallink/assets/           tray icons (made by tools/make_icon.py)
+installer/DualLink.iss     Windows installer script
 tests/                     pytest suite (runs on Windows in CI)
 ```
+
+Every build on GitHub also starts the built app, measures the engine's and the window's memory, takes a
+screenshot of the window and writes the numbers to the run's summary page.
 
 Settings are stored in `%APPDATA%\DualLink\config.json`. That includes the qBittorrent Web UI password,
 if you enter one, in plain text. Nothing leaves your PC: the proxy only listens on 127.0.0.1.

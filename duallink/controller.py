@@ -12,6 +12,7 @@ from collections import deque
 
 from . import __version__
 from .engine import BalancingProxy, Link, list_adapters, looks_like_hotspot
+from .paths import config_dir
 from .qbt import QbtError, QbtWebUI
 
 HISTORY = 90  # seconds of speed history kept for the graph
@@ -75,13 +76,6 @@ def fmt_rate(b):
             return f"{b:.0f} {unit}" if unit == "B/s" else f"{b:.1f} {unit}"
         b /= 1024
     return f"{b:.1f} GiB/s"
-
-
-def config_dir():
-    base = os.environ.get("APPDATA") or os.path.expanduser("~/.config")
-    p = pathlib.Path(base) / "DualLink"
-    p.mkdir(parents=True, exist_ok=True)
-    return p
 
 
 def pretty_adapter(name):
@@ -707,6 +701,10 @@ class Controller:
                 self._quota_warned = True
                 self.notify("Hotspot data limit reached",
                             "DualLink stopped using the hotspot. Downloads continue over Ethernet.")
+
+    def speeds(self):
+        """[(label, bytes/s)] per connection, for the tray icon's tooltip."""
+        return list(zip(self.link_labels(), list(self._speed)))
 
     def status(self, for_ui=False):
         if for_ui and not self.ui_visible:

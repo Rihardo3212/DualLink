@@ -501,7 +501,7 @@ async function poll() {
     if (document.hidden) wait = 3000;                 // minimised: don't fetch or draw anything
     else {
       const s = await api.status();
-      if (s.hidden) wait = 3000; else render(s);      // hidden in the tray: same
+      if (s.hidden) wait = 3000; else render(s);      // minimised (reported by the window): same
     }
   } catch (e) { /* closing */ }
   setTimeout(poll, wait);

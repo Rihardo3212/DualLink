@@ -27,7 +27,7 @@ jobs:
         run: python -m pytest -v
 
       - name: Check the app imports on Windows
-        run: python -c "import webview, pystray, duallink.app; print('imports ok')"
+        run: python -c "import webview, pystray, duallink.service, duallink.window, duallink.tray; print('imports ok')"
 
       - name: Record which repository this build belongs to (for update checks)
         shell: bash
@@ -37,7 +37,7 @@ jobs:
         run: |
           python tools/make_icon.py
           python -m PyInstaller --noconfirm --onefile --windowed --name DualLink --icon build/icon.ico `
-            --add-data "duallink/ui;duallink/ui" `
+            --add-data "duallink/ui;duallink/ui" --add-data "duallink/assets;duallink/assets" `
             --hidden-import pystray._win32 --hidden-import webview.platforms.winforms --hidden-import webview.platforms.edgechromium `
             --hidden-import duallink._build_info `
             main.py
@@ -46,7 +46,7 @@ jobs:
         run: |
           python -m PyInstaller --noconfirm --onedir --windowed --name DualLink --icon build/icon.ico `
             --distpath dist/folder --workpath build/folder `
-            --add-data "duallink/ui;duallink/ui" `
+            --add-data "duallink/ui;duallink/ui" --add-data "duallink/assets;duallink/assets" `
             --hidden-import pystray._win32 --hidden-import webview.platforms.winforms --hidden-import webview.platforms.edgechromium `
             --hidden-import duallink._build_info `
             main.py
@@ -56,6 +56,70 @@ jobs:
         run: |
           $p = Start-Process -FilePath dist\folder\DualLink\DualLink.exe -ArgumentList "--cleanup" -PassThru -Wait
           if ($p.ExitCode -ne 0) { Write-Error "DualLink.exe --cleanup exited with $($p.ExitCode)"; exit 1 }
+
+      - name: Memory report (engine in the tray, then with the window open)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $exe = (Resolve-Path dist\folder\DualLink\DualLink.exe).Path
+          $info = "$env:APPDATA\DualLink\engine.json"
+          Remove-Item $info -ErrorAction SilentlyContinue
+          $null = Start-Process -FilePath $exe -ArgumentList "--minimized" -PassThru
+          for ($i = 0; $i -lt 60 -and -not (Test-Path $info); $i++) { Start-Sleep -Milliseconds 500 }
+          Start-Sleep -Seconds 8
+          $e = Get-Content $info | ConvertFrom-Json
+          $h = @{ "X-DualLink-Token" = $e.token }
+          function Call($name) {
+            Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$($e.port)/api/$name" -Headers $h `
+              -ContentType "application/json" -Body '{"args": []}'
+          }
+          function MB($b) { [math]::Round($b / 1MB, 1) }
+          function TreeOf($rootPid) {
+            $all = Get-CimInstance Win32_Process
+            $todo = @($all | Where-Object { $_.ParentProcessId -eq $rootPid -and $_.Name -eq "DualLink.exe" })
+            $found = @()
+            while ($todo.Count -gt 0) {
+              $p = $todo[0]; $found += $p
+              $todo = @($todo | Select-Object -Skip 1) + @($all | Where-Object { $_.ParentProcessId -eq $p.ProcessId })
+            }
+            return $found
+          }
+          $engine = Get-Process -Id $e.pid
+          $rows = @("### DualLink memory", "", "| | Working set | Private |", "|---|---|---|")
+          $rows += "| Engine - DualLink in the tray | $(MB $engine.WorkingSet64) MB | $(MB $engine.PrivateMemorySize64) MB |"
+          Write-Host "ping: $((Call ping) | ConvertTo-Json -Compress)"
+          Call open_window | Out-Null
+          Start-Sleep -Seconds 15
+          $tree = TreeOf $e.pid
+          $ws = 0; $priv = 0
+          foreach ($p in $tree) {
+            $gp = Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue
+            if ($gp) { $ws += $gp.WorkingSet64; $priv += $gp.PrivateMemorySize64 }
+          }
+          $engine.Refresh()
+          $rows += "| Window - only while open ($($tree.Count) processes incl. WebView2) | $(MB $ws) MB | $(MB $priv) MB |"
+          $rows += "| Engine with the window open | $(MB $engine.WorkingSet64) MB | $(MB $engine.PrivateMemorySize64) MB |"
+          Write-Host "ping: $((Call ping) | ConvertTo-Json -Compress)"
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          New-Item -ItemType Directory -Force ci | Out-Null
+          $bmp.Save("ci\window.png")
+          Call quit | Out-Null
+          Start-Sleep -Seconds 5
+          $left = @(Get-Process -Name DualLink -ErrorAction SilentlyContinue).Count
+          $rows += ""
+          $rows += "DualLink processes left after Quit: $left"
+          $rows | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+          $rows | Write-Host
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ci-report
+          path: ci/
+          if-no-files-found: ignore
 
       - name: Build installer
         shell: pwsh
