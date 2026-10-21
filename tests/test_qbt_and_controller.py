@@ -59,7 +59,8 @@ def test_unreachable():
 def make_ctl(tmp_path, qbt_url):
     adapters = lambda: [("Ethernet adapter Ethernet", "127.0.0.1"), ("Ethernet adapter Ethernet 2", "127.0.0.2")]
     ctl = Controller(cfg_path=tmp_path / "cfg.json", adapter_lister=adapters)
-    ctl.update_settings({"eth_name": "Ethernet", "hot_name": "Ethernet 2", "port": 0, "qbt_url": qbt_url})
+    ctl.update_settings({"eth_name": "Ethernet", "hot_name": "Ethernet 2", "port": 0, "qbt_url": qbt_url,
+                         "qbt_auto": True})                  # qBittorrent added (a new install has no apps)
     return ctl
 
 

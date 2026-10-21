@@ -396,21 +396,23 @@ public sealed partial class MainView
     {
         var list = Ui.V(0);
         bool first = true;
-        foreach (var a in Apps.Where(a => a.Key != "qbt"))
+        foreach (var a in Apps)
         {
             if (!first) list.Children.Add(Ui.Divider(p.Line));
             first = false;
-            bool on = AppOn(a.Key);
+            bool added = Added(a.Key);
             var key = a.Key;
-            var btn = Ui.Btn(on ? "Set up" : "Add", async () =>
+            var btn = Ui.Btn(added ? "Set up" : "Add", async () =>
             {
-                if (!AppOn(key))
+                if (!Added(key))
                 {
-                    await SaveNow(Patch(SettingKey(key), true));
+                    var patch = Patch(SettingKey(key), true);
+                    patch["added_apps"] = AppListWith(key, true);
+                    await SaveNow(patch);
                     BuildApps();
                 }
                 OpenGuide(key);
-            }, primary: !on, small: true);
+            }, primary: !added, small: true);
             var row = Ui.Columns(Ui.Auto, Ui.Star(), Ui.Auto);
             row.Padding = new Thickness(0, 10, 0, 10);
             row.Children.Add(Ui.Badge(a.Badge, Palette.Hex(a.Color)).At(0));
@@ -422,6 +424,27 @@ public sealed partial class MainView
         foot.Margin = new Thickness(0, 10, 0, 0);
         list.Children.Add(foot);
         ShowDialog(NewDialog("Apps that can use DualLink", list), "more");
+    }
+
+    void AskRemoveApp(AppInfo a)
+    {
+        bool other = a.Key == "other";
+        string name = other ? "the other app" : a.Name;
+        var body = Ui.V(10);
+        if (a.Key == "qbt")
+            body.Children.Add(Ui.T("DualLink will stop setting up qBittorrent. If DualLink is on, qBittorrent gets its own proxy settings back right away.", 13, p.Text, wrap: true));
+        else
+            body.Children.Add(Ui.Rich($"If you set up {name} to use DualLink, set its proxy back to <b>none</b> in {name} too - otherwise its downloads stop working while DualLink is off.", 13, p.Text, p.Text));
+        body.Children.Add(Tip("You can add it again any time with + Add an app."));
+        var d = NewDialog(other ? "Remove the other app?" : $"Remove {a.Name}?", body, "Cancel");
+        d.PrimaryButtonText = "Remove";
+        d.DefaultButton = ContentDialogButton.Close;       // removing isn't the default
+        d.PrimaryButtonClick += (_, _) =>
+        {
+            RemoveApp(a.Key);
+            Toast(other ? "Other app removed" : $"{a.Name} removed");
+        };
+        ShowDialog(d, "remove");
     }
 
     // ---- update ------------------------------------------------------------------------------- //

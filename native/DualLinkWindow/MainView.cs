@@ -73,7 +73,7 @@ public sealed partial class MainView
     {
         public required string Key;
         public required TextBlock Status;
-        public required Button Setup, Fix;
+        public required Button Setup, Fix, Remove;
         public required ToggleSwitch Switch;
     }
 
@@ -346,7 +346,7 @@ public sealed partial class MainView
         appRows = new StackPanel();
         var title = Ui.SectionTitle("Apps", p.Muted);
         title.Margin = new Thickness(0, 12, 0, 4);
-        var more = Ui.Link("+ More apps", OpenMoreApps);
+        var more = Ui.Link("+ Add an app", OpenMoreApps);
         more.Margin = new Thickness(0, 8, 0, 10);
         return Ui.Box(Ui.V(0, title, appRows, Ui.Divider(p.Line), more), p.Card, p.CardStroke, 16, new Thickness(18, 0, 18, 0));
     }
@@ -603,15 +603,37 @@ public sealed partial class MainView
     bool AppOn(string key) => settings.Bool(SettingKey(key));
     JsonObject LiveOf(string key) => (last?.Obj("app_live") ?? new JsonObject()).Obj(key);
 
+    /// <summary>Is the app in the Apps list? (A new install starts with none; the user adds and removes them.)</summary>
+    bool Added(string key) => settings.Arr("added_apps").Any(x => x.AsStr() == key);
+
+    JsonArray AppListWith(string key, bool add)
+    {
+        var list = new JsonArray();
+        foreach (var x in settings.Arr("added_apps"))
+            if (x.AsStr() != key) list.Add((JsonNode?)JsonValue.Create(x.AsStr()));
+        if (add) list.Add((JsonNode?)JsonValue.Create(key));
+        return list;
+    }
+
+    /// <summary>The apps the user added, plus any other app that is using DualLink right now (so it isn't missed).
+    /// qBittorrent only when added: DualLink sets it up and puts it back by itself.</summary>
     List<AppInfo> ShownApps() =>
-        Apps.Where(a => a.Key == "qbt" || a.Key == "fdm" || AppOn(a.Key) || LiveOf(a.Key).Num("connections") > 0).ToList();
+        Apps.Where(a => Added(a.Key) || (a.Key != "qbt" && LiveOf(a.Key).Num("connections") > 0)).ToList();
+
+    string AppSig(List<AppInfo> shown) => string.Join(",", shown.Select(a => a.Key + (Added(a.Key) ? "" : "?")));
 
     void BuildApps()
     {
         var shown = ShownApps();
-        appSig = string.Join(",", shown.Select(a => a.Key));
+        appSig = AppSig(shown);
         appRows.Children.Clear();
         appViews.Clear();
+        if (shown.Count == 0)
+        {
+            var empty = Ui.T("No apps yet. Add the download apps you want DualLink to speed up.", 12.5, p.Muted, wrap: true);
+            empty.Margin = new Thickness(0, 4, 0, 12);
+            appRows.Children.Add(empty);
+        }
         for (int i = 0; i < shown.Count; i++)
         {
             var a = shown[i];
@@ -628,36 +650,45 @@ public sealed partial class MainView
                 if (quiet || sw.IsOn == AppOn(a.Key)) return;  // set by the window itself
                 SetApp(a.Key, sw.IsOn);
             };
-            var g = Ui.Columns(Ui.Auto, Ui.Star(), Ui.Auto, Ui.Auto);
+            var remove = Ui.IconBtn("\uE711", $"Remove {a.Name}", () => AskRemoveApp(a), 32);
+            remove.Margin = new Thickness(6, 0, 0, 0);
+            remove.Background = Ui.B(Colors.Transparent);      // quiet until pointed at
+            remove.BorderBrush = Ui.B(Colors.Transparent);
+            remove.Foreground = Ui.B(p.Muted);
+            remove.Visibility = Added(a.Key) ? Visibility.Visible : Visibility.Collapsed;
+            var g = Ui.Columns(Ui.Auto, Ui.Star(), Ui.Auto, Ui.Auto, Ui.Auto);
             g.Padding = new Thickness(0, 11, 0, 11);
             g.Children.Add(Ui.Badge(a.Badge, Palette.Hex(a.Color)).At(0));
             g.Children.Add(Ui.V(1, Ui.T(a.Name, 13.5, p.Text, 600), status).At(1));
             g.Children.Add(setup.At(2));
             g.Children.Add(fix.At(2));
             g.Children.Add(sw.At(3));
+            g.Children.Add(remove.At(4));
             appRows.Children.Add(g);
-            appViews.Add(new AppRow { Key = a.Key, Status = status, Setup = setup, Fix = fix, Switch = sw });
+            appViews.Add(new AppRow { Key = a.Key, Status = status, Setup = setup, Fix = fix, Remove = remove, Switch = sw });
         }
         if (last != null) RenderApps(last, false);
     }
 
     void SetApp(string key, bool on)
     {
-        Save(Patch(SettingKey(key), on));
+        var patch = Patch(SettingKey(key), on);
+        if (on && !Added(key)) patch["added_apps"] = AppListWith(key, true);   // switching on adds it to the list
+        Save(patch);
         if (on) OpenGuide(key);
-        if (!on && key != "qbt" && key != "fdm")
-        {
-            var t = queue.CreateTimer();                      // extra apps leave the list when switched off
-            t.Interval = TimeSpan.FromMilliseconds(400);
-            t.IsRepeating = false;
-            t.Tick += (_, _) => BuildApps();
-            t.Start();
-        }
+    }
+
+    void RemoveApp(string key)
+    {
+        var patch = Patch(SettingKey(key), false);
+        patch["added_apps"] = AppListWith(key, false);
+        Save(patch);
+        BuildApps();
     }
 
     void RenderApps(JsonObject s, bool current)
     {
-        if (string.Join(",", ShownApps().Select(a => a.Key)) != appSig)
+        if (AppSig(ShownApps()) != appSig)
         {
             BuildApps();
             return;
@@ -709,7 +740,8 @@ public sealed partial class MainView
             }
             else if (n > 0 && key != "qbt")
             {
-                t = $"{who}Using DualLink - switch on so it keeps working while DualLink is off";
+                t = Added(key) ? $"{who}Using DualLink - switch on so it keeps working while DualLink is off"
+                               : $"{who}Using DualLink, but not in your apps - switch on to add it";
                 color = p.Warn;
             }
             row.Status.Text = t;

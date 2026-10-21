@@ -47,22 +47,23 @@ A single torrent or a single file therefore uses both internet connections.
 
 ## Apps
 
-Switch apps on in DualLink's **Apps** card.
+DualLink starts with no apps. Add the ones you use with **+ Add an app** in the **Apps** card; each one shows
+its setup steps. In the list, an app's switch pauses it and **✕** removes it again.
 
 | App | Setup |
 |---|---|
-| **qBittorrent** | Automatic. DualLink applies the proxy when you turn it on and restores your settings when you turn it off. Needs qBittorrent's Web UI: press **Set up** next to qBittorrent for the steps and a connection test. |
+| **qBittorrent** | Automatic once added. DualLink applies the proxy when you turn it on and restores your settings when you turn it off. Needs qBittorrent's Web UI: press **Set up** next to qBittorrent for the steps and a connection test. |
 | **Free Download Manager** | Press **Set up** next to FDM for the steps. Once: in FDM open **☰ › Settings › Network**, choose manual proxy configuration, type **SOCKS5**, address `127.0.0.1`, port `1080`. Leave it like that. While DualLink is off it passes FDM's downloads through over your normal connection, and when it's on, each file's pieces are spread over both links. Keep DualLink running (tray / Start with Windows); if it's closed, FDM can't download. |
 
 **JDownloader, Internet Download Manager, Firefox** and **any other app with a SOCKS5 proxy setting** work the
-same way as FDM - add them with **+ More apps**, which shows the steps for each.
+same way as FDM - add them with **+ Add an app**, which shows the steps for each.
 
 ## Install
 
 1. Download **`DualLink-Setup-x.y.z.exe`** from the [Releases](../../releases) page and run it. It installs for your user
    only (no administrator prompt) with a Start menu entry, an optional desktop shortcut and an uninstaller.
    (Up to 1.11 there was also a standalone `DualLink.exe`; from 1.12 the installer is the only download.)
-2. **One-time qBittorrent setup:** in qBittorrent open **Tools › Options › Web UI**, tick
+2. **If you use qBittorrent:** add it in DualLink with **+ Add an app**, then (once) in qBittorrent open **Tools › Options › Web UI**, tick
    **Web User Interface (Remote control)** (port 8080), tick
    **Bypass authentication for clients on localhost**, and click OK.
    (If you'd rather not use the Web UI, DualLink can show the manual proxy settings instead.)

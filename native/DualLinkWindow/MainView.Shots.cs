@@ -87,6 +87,18 @@ public sealed partial class MainView
             OpenSettings(true);
             await Shot("12-settings-other-theme");
             OpenSettings(false);
+            if (opt.Demo)
+            {
+                AskRemoveApp(Apps.First(a => a.Key == "fdm"));
+                await Shot("13-remove-app", 1000);
+                CloseDialog();
+                // what a new install looks like: no apps, nothing connected
+                await engine.CallAsync("power", false);
+                await SaveNow(new JsonObject { ["added_apps"] = new JsonArray(), ["qbt_auto"] = false, ["fdm"] = false });
+                await Task.Delay(1500);                      // a status poll or two
+                BuildApps();
+                await Shot("14-no-apps", 600);
+            }
             log.AppendLine("done");
         }
         catch (Exception e)

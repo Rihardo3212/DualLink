@@ -1,4 +1,4 @@
-"""1.12.1: after an in-app update DualLink is on again if it was on before."""
+"""1.13: after an in-app update DualLink is on again if it was on before."""
 from duallink.controller import Controller
 from test_adapters import Adapters, wait_for
 from test_v18 import make

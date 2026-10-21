@@ -29,11 +29,12 @@ DEFAULTS = {
     "share_eth": 1.0, "share_hot": 1.0,
     "quota_mb": 0,
     "port": 1080,
-    "qbt_auto": True, "qbt_url": "http://127.0.0.1:8080", "qbt_user": "", "qbt_pass": "",
+    "qbt_auto": False, "qbt_url": "http://127.0.0.1:8080", "qbt_user": "", "qbt_pass": "",
     "reconnect": True,
     "tray": True, "autostart": False,
     "qbt_saved": None,     # original qBittorrent settings while DualLink is on (crash recovery)
     "tray_hint_shown": False,
+    "added_apps": [],          # the apps in the window's Apps list (a new install starts with none)
     # Apps set up by hand (they stay pointed at the proxy) -> keep it up in pass-through mode while DualLink is off
     "fdm": False, "jd": False, "idm": False, "firefox": False, "other": False,
     "auto_on_hotspot": True,   # turn on when the hotspot connects
@@ -57,6 +58,19 @@ APP_PROCESSES = {           # program names (lower case) -> app
     "idm": ("idman.exe",),
     "firefox": ("firefox.exe",),
 }
+
+
+def clean_app_list(apps):
+    """Known app keys only, each once."""
+    out = []
+    for k in apps if isinstance(apps, list) else []:
+        if k in APP_KEYS and k not in out:
+            out.append(k)
+    return out
+
+
+def app_setting(key):
+    return "qbt_auto" if key == "qbt" else key
 
 
 def classify_clients(counts):
@@ -115,6 +129,7 @@ class Controller:
         self.notify = lambda title, msg: None      # set by the GUI (tray notification)
         self.on_change = lambda: None              # set by the GUI (refresh tray menu)
         self._lock = threading.RLock()
+        self._qbt_lock = threading.Lock()          # one qBittorrent set-up or restore at a time
         self._hist = [deque([0.0] * HISTORY, maxlen=HISTORY) for _ in self.links]
         self._speed = [0.0, 0.0]
         self._last = [(0, time.time()), (0, time.time())]
@@ -150,9 +165,18 @@ class Controller:
     # ---- settings --------------------------------------------------------- #
     def _load(self):
         try:
-            self.cfg.update(json.loads(self.cfg_path.read_text(encoding="utf-8")))
+            data = json.loads(self.cfg_path.read_text(encoding="utf-8"))
         except Exception:
-            pass
+            return                                 # first start: no apps until they're added
+        if not isinstance(data, dict):
+            return
+        self.cfg.update(data)
+        if "qbt_auto" not in data:
+            self.cfg["qbt_auto"] = True            # the default before 1.13
+        if "added_apps" not in data:
+            # Settings from before 1.13, when qBittorrent and FDM were always listed: keep the list as it was
+            self.cfg["added_apps"] = ["qbt", "fdm"] + [k for k in MANUAL_APPS if k != "fdm" and data.get(k)]
+        self.cfg["added_apps"] = clean_app_list(self.cfg["added_apps"])
 
     def save(self):
         try:
@@ -180,9 +204,15 @@ class Controller:
         if len(names) != len(set(names)):
             raise SettingsError("Each connection can only be used once.")
         with self._lock:
+            qbt_before = bool(self.cfg["qbt_auto"])
             for k, v in (new or {}).items():
                 if k in allowed:
                     self.cfg[k] = v
+            added = clean_app_list(self.cfg.get("added_apps"))
+            for k in APP_KEYS:                     # an app that is switched on is always in the list
+                if self.cfg.get(app_setting(k)) and k not in added:
+                    added.append(k)
+            self.cfg["added_apps"] = added
             self.cfg["quota_mb"] = max(0.0, float(self.cfg.get("quota_mb") or 0))
             port = self.cfg.get("port")
             self.cfg["port"] = int(port) if port not in (None, "") else 1080
@@ -196,6 +226,8 @@ class Controller:
             self._sync_links()
         if self.running and ("eth_name" in new or "hot_name" in new or "extra" in new):
             self.check_adapters()          # switch connections right away
+        if self.running and bool(self.cfg["qbt_auto"]) != qbt_before:
+            threading.Thread(target=self._qbt_follow, daemon=True).start()   # talks to qBittorrent: don't wait
         return self.public_settings()
 
     def _apply_live_settings(self):
@@ -368,10 +400,11 @@ class Controller:
 
         if note:
             self.notify("DualLink is on", note)
-        if self.cfg["qbt_auto"]:
-            self._qbt_apply()
-        else:
-            self.qbt_state = {"state": "disabled", "message": ""}
+        with self._qbt_lock:
+            if self.cfg["qbt_auto"]:
+                self._qbt_apply()
+            else:
+                self.qbt_state = {"state": "disabled", "message": ""}
         self.on_change()
         return {"ok": True, "message": note} if note else {"ok": True}
 
@@ -613,22 +646,40 @@ class Controller:
         except QbtError as e:
             self.qbt_state = {"state": e.kind, "message": str(e)}
 
+    def _qbt_restore(self):
+        """Give qBittorrent its own settings back (saved when DualLink set it up)."""
+        if not self.cfg.get("qbt_saved"):
+            return
+        try:
+            q = self._qbt()
+            q.restore(self.cfg["qbt_saved"])
+            self.cfg["qbt_saved"] = None
+            self.save()
+            if self.cfg["reconnect"]:
+                q.reconnect(q.downloading_hashes())
+        except QbtError:
+            pass  # will be retried at next start
+
+    def _qbt_follow(self):
+        """qBittorrent was added (switched on) or removed (switched off) while DualLink is on."""
+        with self._qbt_lock:
+            if not self.running:
+                return                              # turned off meanwhile: power_off has dealt with it
+            if self.cfg["qbt_auto"]:
+                self._qbt_apply()
+            else:
+                self._qbt_restore()
+                self.qbt_state = {"state": "disabled", "message": ""}
+        self.on_change()
+
     def power_off(self):
         with self._lock:
             if not self.running:
                 return {"ok": True}
             self.remember_speeds()
             self.running = False
-        if self.cfg.get("qbt_saved"):
-            try:
-                q = self._qbt()
-                q.restore(self.cfg["qbt_saved"])
-                self.cfg["qbt_saved"] = None
-                self.save()
-                if self.cfg["reconnect"]:
-                    q.reconnect(q.downloading_hashes())
-            except QbtError:
-                pass  # will be retried at next start
+        with self._qbt_lock:
+            self._qbt_restore()
         if self.manual_apps_on():
             self.proxy.passthrough = True      # apps set up by hand keep working over the normal route
         else:
@@ -639,7 +690,8 @@ class Controller:
 
     def retry_qbt(self):
         if self.running and self.cfg["qbt_auto"]:
-            self._qbt_apply()
+            with self._qbt_lock:
+                self._qbt_apply()
         return self.qbt_state
 
     # ---- following adapters while running ------------------------------------ #

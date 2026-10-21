@@ -17,6 +17,7 @@ public sealed class DemoEngine : IEngine
         ["auto"] = true, ["recycle"] = true, ["share_eth"] = 1.0, ["share_hot"] = 1.0, ["quota_mb"] = 0,
         ["port"] = 1080, ["qbt_auto"] = true, ["qbt_url"] = "http://127.0.0.1:8080", ["qbt_user"] = "", ["qbt_pass"] = "",
         ["reconnect"] = true, ["tray"] = true, ["autostart"] = true, ["tray_hint_shown"] = true,
+        ["added_apps"] = new JsonArray("qbt", "fdm"),
         ["fdm"] = true, ["jd"] = false, ["idm"] = false, ["firefox"] = false, ["other"] = false,
         ["auto_on_hotspot"] = true, ["auto_on_start"] = false, ["check_updates"] = true,
     };
@@ -77,9 +78,9 @@ public sealed class DemoEngine : IEngine
 
     static JsonObject Update() => new()
     {
-        ["version"] = "1.12.2",
-        ["url"] = "https://github.com/Rihardo3212/DualLink/releases/tag/v1.12.2",
-        ["notes"] = "## What's Changed\n* Faster start of the new window\n* Fix the tray tooltip with three connections\n\n**Full Changelog**: https://github.com/Rihardo3212/DualLink/compare/v1.12.1...v1.12.2",
+        ["version"] = "1.13.1",
+        ["url"] = "https://github.com/Rihardo3212/DualLink/releases/tag/v1.13.1",
+        ["notes"] = "## What's Changed\n* Faster start of the new window\n* Fix the tray tooltip with three connections\n\n**Full Changelog**: https://github.com/Rihardo3212/DualLink/compare/v1.13.0...v1.13.1",
     };
 
     JsonObject Status()
@@ -144,7 +145,7 @@ public sealed class DemoEngine : IEngine
             },
             ["speedtest"] = speedtest.DeepClone(), ["update"] = checkedUpdates ? Update() : null,
             ["update_state"] = new JsonObject { ["phase"] = "idle", ["done"] = 0, ["total"] = 0, ["message"] = "" },
-            ["just_updated"] = false, ["version"] = "1.12.1", ["qbt_auto"] = settings.Bool("qbt_auto"),
+            ["just_updated"] = false, ["version"] = "1.13.0", ["qbt_auto"] = settings.Bool("qbt_auto"),
             ["standby"] = false, ["standby_error"] = null,
         };
     }
