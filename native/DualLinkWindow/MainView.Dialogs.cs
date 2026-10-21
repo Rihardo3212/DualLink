@@ -434,10 +434,10 @@ public sealed partial class MainView
         if (last?.Get("update") is not JsonObject u) return;
         var body = Ui.V(8);
         body.Children.Add(Ui.Rich($"Version <b>{u.Str("version")}</b> is available - you have {last.Str("version")}.", 14, p.Text, p.Text));
-        var notes = u.Str("notes");
+        var notes = Fmt.CleanNotes(u.Str("notes"));     // can be empty: GitHub's notes are often only a changelog link
         if (notes != "")
         {
-            var text = Ui.T(Fmt.CleanNotes(notes), 12.5, p.Muted, wrap: true);
+            var text = Ui.T(notes, 12.5, p.Muted, wrap: true);
             text.IsTextSelectionEnabled = true;
             var box = Ui.Box(new ScrollViewer { Content = text, MaxHeight = 170 }, p.Inner, p.Line, 10, new Thickness(12, 10, 12, 10));
             body.Children.Add(box);

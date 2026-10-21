@@ -42,11 +42,12 @@ DEFAULTS = {
     "learned": {},             # adapter name -> {"per_conn": bytes/s per connection, "ts": epoch} (internal)
     "speedtest": None,         # last speed test result (internal)
     "seen_apps": {},           # app key -> last time it was seen connected to DualLink (internal)
+    "on_after_update": False,  # DualLink was on when an in-app update started: turn on again after it (internal)
 }
 
 
 MANUAL_APPS = ("fdm", "jd", "idm", "firefox", "other")
-INTERNAL_KEYS = ("qbt_saved", "learned", "speedtest", "seen_apps")
+INTERNAL_KEYS = ("qbt_saved", "learned", "speedtest", "seen_apps", "on_after_update")
 MAX_EXTRA = 2
 APP_KEYS = ("qbt",) + MANUAL_APPS
 APP_PROCESSES = {           # program names (lower case) -> app
@@ -518,6 +519,9 @@ class Controller:
                 self.update_state.update(done=done, total=total)
             path = self.update_download(asset, progress=progress)
             self.update_state.update(phase="installing")
+            if self.running:
+                self.cfg["on_after_update"] = True    # the new version turns on again (see startup)
+                self.save()
             self.power_off()                      # gives qBittorrent its own settings back first
             if kind == "installed":
                 self.update_installer(path)       # the installer starts the new version when done
@@ -525,7 +529,16 @@ class Controller:
                 self.update_portable(path)        # swaps DualLink.exe and starts the new one
             self.quit_app()
         except Exception as e:  # noqa: BLE001
+            was_on = bool(self.cfg.get("on_after_update"))
+            if was_on:
+                self.cfg["on_after_update"] = False
+                self.save()
             self.update_state = {"phase": "error", "done": 0, "total": 0, "message": str(e)}
+            if was_on and not self.running:
+                try:
+                    self.power_on()               # the update didn't happen: back to how it was
+                except Exception:  # noqa: BLE001
+                    pass
 
     def start_update_checks(self, first_delay=10, every=12 * 3600):
         def loop():
@@ -539,7 +552,12 @@ class Controller:
     # ---- turning on automatically ------------------------------------------------ #
     def startup(self):
         """Called once when the app starts."""
-        if self.cfg.get("auto_on_start") and self.cfg["eth_name"] and self.cfg["hot_name"] and not self.running:
+        resume = bool(self.cfg.get("on_after_update"))
+        if resume:
+            self.cfg["on_after_update"] = False   # only for the start right after the update
+            self.save()
+        wanted = self.cfg.get("auto_on_start") or (resume and self.just_updated)
+        if wanted and self.cfg["eth_name"] and self.cfg["hot_name"] and not self.running:
             return self.power_on()
         return {"ok": True}
 

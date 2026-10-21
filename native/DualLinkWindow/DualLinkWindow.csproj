@@ -10,7 +10,7 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>DualLinkWindow</RootNamespace>
     <AssemblyName>DualLinkWindow</AssemblyName>
-    <Version>1.12.0</Version>
+    <Version>1.12.1</Version>
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

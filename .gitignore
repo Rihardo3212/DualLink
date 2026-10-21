@@ -12,3 +12,6 @@ native/**/bin/
 native/**/obj/
 .vs/
 shots/
+
+# files the Claude app saves into this folder
+Claude outputs/

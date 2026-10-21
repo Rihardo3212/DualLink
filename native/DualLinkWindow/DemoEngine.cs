@@ -77,9 +77,9 @@ public sealed class DemoEngine : IEngine
 
     static JsonObject Update() => new()
     {
-        ["version"] = "1.12.1",
-        ["url"] = "https://github.com/Rihardo3212/DualLink/releases/tag/v1.12.1",
-        ["notes"] = "## What's Changed\n* Faster start of the new window\n* Fix the tray tooltip with three connections\n\n**Full Changelog**: https://github.com/Rihardo3212/DualLink/compare/v1.12.0...v1.12.1",
+        ["version"] = "1.12.2",
+        ["url"] = "https://github.com/Rihardo3212/DualLink/releases/tag/v1.12.2",
+        ["notes"] = "## What's Changed\n* Faster start of the new window\n* Fix the tray tooltip with three connections\n\n**Full Changelog**: https://github.com/Rihardo3212/DualLink/compare/v1.12.1...v1.12.2",
     };
 
     JsonObject Status()
@@ -144,7 +144,7 @@ public sealed class DemoEngine : IEngine
             },
             ["speedtest"] = speedtest.DeepClone(), ["update"] = checkedUpdates ? Update() : null,
             ["update_state"] = new JsonObject { ["phase"] = "idle", ["done"] = 0, ["total"] = 0, ["message"] = "" },
-            ["just_updated"] = false, ["version"] = "1.12.0", ["qbt_auto"] = settings.Bool("qbt_auto"),
+            ["just_updated"] = false, ["version"] = "1.12.1", ["qbt_auto"] = settings.Bool("qbt_auto"),
             ["standby"] = false, ["standby_error"] = null,
         };
     }
