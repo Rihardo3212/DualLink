@@ -37,13 +37,12 @@ A single torrent or a single file therefore uses both internet connections.
 - **Traffic check.** Shows which programs are connected through DualLink, which ones connect directly
   around it, and how much traffic Windows sees on each connection compared with what DualLink carries.
 - **IPv4 and IPv6.** Apps that hand DualLink an IPv6 address are split over both links too.
-- **Light on your PC.** While DualLink sits in the tray only its small engine runs (about 20-25 MB of memory).
-  The window is a separate process that exists only while it's open; closing it gives its memory back.
-  At ~14 MiB/s over 80 connections the proxy uses about 10 % of one CPU core and can relay over 1 GiB/s, and
-  network information comes straight from Windows (no helper programs started in the background).
-- **New window (preview).** A native Windows window, built like Windows 11's own apps (WinUI 3), with the same
-  screens as the classic one. Turn it on in **Settings › App › Use the new window**; you can switch back any time,
-  and if it ever fails to start DualLink opens the classic window instead.
+- **A native Windows app.** The window is built like Windows 11's own apps (WinUI 3, compiled ahead of time),
+  follows your light/dark mode and accent colour, and opens in about a second.
+- **Light on your PC.** While DualLink sits in the tray only its small engine runs (about 25 MB of memory).
+  The window is a separate process (about 50-80 MB) that exists only while it's open; closing it gives that
+  memory back. At ~14 MiB/s over 80 connections the proxy uses about 10 % of one CPU core and can relay over
+  1 GiB/s, and network information comes straight from Windows (no helper programs started in the background).
 - Runs in the system tray, shows live speed graphs, and can start with Windows.
 
 ## Apps
@@ -62,7 +61,7 @@ same way as FDM - add them with **+ More apps**, which shows the steps for each.
 
 1. Download **`DualLink-Setup-x.y.z.exe`** from the [Releases](../../releases) page and run it. It installs for your user
    only (no administrator prompt) with a Start menu entry, an optional desktop shortcut and an uninstaller.
-   Prefer no installation? `DualLink.exe` on the same page runs as-is.
+   (Up to 1.11 there was also a standalone `DualLink.exe`; from 1.12 the installer is the only download.)
 2. **One-time qBittorrent setup:** in qBittorrent open **Tools › Options › Web UI**, tick
    **Web User Interface (Remote control)** (port 8080), tick
    **Bypass authentication for clients on localhost**, and click OK.
@@ -102,18 +101,21 @@ same way as FDM - add them with **+ More apps**, which shows the steps for each.
 
 ## Build from source
 
-Requires Windows 10/11 and Python 3.10+. The native window also needs the .NET 10 SDK (Visual Studio 2026 has it);
-publishing it ahead of time additionally needs Visual Studio's *Desktop development with C++* workload.
+Requires Windows 10/11, Python 3.10+ and the .NET 10 SDK for the window (Visual Studio 2026 has it). Compiling
+the window ahead of time, like the released version, additionally needs Visual Studio's *Desktop development
+with C++* workload; without it you get a normal build that works the same.
 
 ```bat
 git clone https://github.com/<you>/DualLink.git
 cd DualLink
 python -m pip install -r requirements.txt
-python main.py            :: run from source
-build.bat                 :: run tests and build dist\DualLink.exe
+build.bat                 :: run the tests, build DualLink and its window (and the installer, with Inno Setup)
+python main.py            :: or run the engine from source - it opens the newest window build it finds
 ```
 
-Every push to GitHub runs the tests on Windows and builds `DualLink.exe` and the installer `DualLink-Setup-x.y.z.exe`
+Open `native\DualLinkWindow.sln` in Visual Studio to work on the window; it talks to whichever DualLink is running.
+
+Every push to GitHub runs the tests on Windows and builds the installer `DualLink-Setup-x.y.z.exe`
 (made with [Inno Setup](https://jrsoftware.org/isinfo.php) from `installer/DualLink.iss`). You can find them under
 **Actions › latest run › Artifacts**. To publish a release, push a tag:
 
@@ -124,21 +126,19 @@ git push origin v1.0.0
 
 ## How it's put together
 
-DualLink runs as two processes from the same `DualLink.exe`:
+DualLink runs as two processes:
 
-- **The engine** (`DualLink.exe`, or `--minimized` when it starts with Windows) does all the work: the proxy,
-  balancing, qBittorrent set-up, notifications and the tray icon. It never loads the window's libraries.
-- **The window** is started by the engine when you open DualLink and ends when you close it. It shows the
-  interface and asks the engine for everything over a small local API (`127.0.0.1` only, with a random port and
-  a secret token written to `%APPDATA%\DualLink\engine.json`; requests from web pages are refused).
-  There are two: the classic web window (`DualLink.exe --window`) and the new native one
-  (`DualLinkWindow\DualLinkWindow.exe`, C# / WinUI 3, compiled ahead of time; installed version only).
+- **The engine** (`DualLink.exe`, Python; `--minimized` when it starts with Windows) does all the work: the
+  proxy, balancing, qBittorrent set-up, notifications and the tray icon.
+- **The window** (`DualLinkWindow\DualLinkWindow.exe`, C# / WinUI 3) is started by the engine when you open
+  DualLink and ends when you close it. It asks the engine for everything over a small local API (`127.0.0.1`
+  only, with a random port and a secret token written to `%APPDATA%\DualLink\engine.json`; requests from web
+  pages are refused).
 
 ```
-main.py                    entry point (engine, --window, --cleanup)
+main.py                    entry point (engine, --cleanup)
 duallink/service.py        the engine: wires everything together, opens/closes the window
-duallink/api.py            the local control API (server in the engine, client in the window)
-duallink/window.py         the window process (pywebview)
+duallink/api.py            the local control API the window talks to
 duallink/tray.py           tray icon straight from the Windows API (pystray as fallback)
 duallink/engine.py         SOCKS5 proxy + automatic balancing (no dependencies)
 duallink/controller.py     settings, on/off, statistics, start-with-Windows
@@ -148,15 +148,14 @@ duallink/updates.py        update check against GitHub Releases
 duallink/diag.py           traffic check and live app status
 duallink/winapi.py         adapters, TCP connections and program names straight from Windows
 duallink/instance.py       one engine and one window at a time
-duallink/ui/index.html     the classic (web) interface
 duallink/assets/           tray icons (made by tools/make_icon.py)
-native/DualLinkWindow/     the new native window (C#, WinUI 3) - open native/DualLinkWindow.sln in Visual Studio
+native/DualLinkWindow/     the window (C#, WinUI 3) - open native/DualLinkWindow.sln in Visual Studio
 installer/DualLink.iss     Windows installer script
 tests/                     pytest suite (runs on Windows in CI)
 ```
 
-Every build on GitHub also starts the built app, measures the memory of the engine and of both windows, takes
-screenshots and writes the numbers to the run's summary page. The native window can photograph all of its own
+Every build on GitHub also starts the built app, measures the memory of the engine and the window, takes
+screenshots and writes the numbers to the run's summary page. The window can photograph all of its own
 screens: `DualLinkWindow.exe --demo --screenshots shots` (made-up data) or `--screenshots shots` (your running
 DualLink, read-only) - in Visual Studio these are the "Demo screenshots" and "Screenshots of the running DualLink"
 start options.

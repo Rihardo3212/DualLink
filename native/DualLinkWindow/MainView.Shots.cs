@@ -66,14 +66,14 @@ public sealed partial class MainView
                 // the demo can run a pretend test: show the result screen too
                 await (engine.CallAsync("start_speed_test"));
                 await Task.Delay(5500);
-                if (await engine.CallAsync("status") is JsonObject s) Render(s);
+                if (await engine.CallAsync("status") is JsonObject s) Render(s, false);
                 await Shot("07b-speed-test-result", 600);
             }
             OpenTrafficCheck();
             await Shot("08-traffic-check", opt.Demo ? 2600 : 5500);
-            if (last?.Get("update") is JsonObject)
+            if (opt.Demo)
             {
-                OpenUpdate();
+                await CheckNow();                            // the demo always has an update to show
                 await Shot("09-update", 1000);
             }
             CloseDialog();

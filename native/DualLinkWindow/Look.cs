@@ -196,6 +196,9 @@ public static class Ui
         };
     }
 
+    /// <summary>Dark or light: set when the window is built, used for the accent colour of primary buttons.</summary>
+    public static bool Dark = true;
+
     public static Button Btn(string text, Action onClick, bool primary = false, bool small = false)
     {
         var b = new Button { Content = text, VerticalAlignment = VerticalAlignment.Center };
@@ -204,25 +207,45 @@ public static class Ui
             b.FontSize = 12.5;
             b.Padding = new Thickness(11, 3, 11, 4);
         }
-        if (primary) b.Style = AccentStyle();
+        if (primary) Paint(b, AccentColor(), Dark ? Colors.Black : Colors.White);
         b.Click += (_, _) => onClick();
         return b;
     }
 
-    static Style? accent;
-
-    public static Style? AccentStyle()
+    /// <summary>Windows' accent colour, the shade Windows itself uses for buttons in dark or light mode.</summary>
+    public static Color AccentColor()
     {
-        if (accent != null) return accent;
         try
         {
-            accent = Application.Current.Resources["AccentButtonStyle"] as Style;
+            var ui = new Windows.UI.ViewManagement.UISettings();
+            return ui.GetColorValue(Dark ? Windows.UI.ViewManagement.UIColorType.AccentLight2
+                                         : Windows.UI.ViewManagement.UIColorType.AccentDark1);
         }
         catch (Exception)
         {
-            accent = null;
+            return Dark ? Palette.Hex("#4cc2ff") : Palette.Hex("#005fb8");
         }
-        return accent;
+    }
+
+    /// <summary>
+    /// Colours a button, including while it's hovered or pressed. (Done by hand: looking up the built-in accent
+    /// style doesn't work in the ahead-of-time compiled build.) Must be called before the button is shown.
+    /// </summary>
+    public static void Paint(Button b, Color fill, Color text)
+    {
+        var normal = B(fill);
+        var hover = B(Palette.WithAlpha(fill, 0xE6));
+        var pressed = B(Palette.WithAlpha(fill, 0xCC));
+        var ink = B(text);
+        b.Background = normal;
+        b.BorderBrush = normal;
+        b.Foreground = ink;
+        b.Resources["ButtonBackgroundPointerOver"] = hover;
+        b.Resources["ButtonBackgroundPressed"] = pressed;
+        b.Resources["ButtonBorderBrushPointerOver"] = hover;
+        b.Resources["ButtonBorderBrushPressed"] = pressed;
+        b.Resources["ButtonForegroundPointerOver"] = ink;
+        b.Resources["ButtonForegroundPressed"] = B(Palette.WithAlpha(text, 0xCC));
     }
 
     public static Button IconBtn(string glyph, string tooltip, Action onClick, double size = 36)

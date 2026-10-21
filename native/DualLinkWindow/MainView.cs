@@ -42,7 +42,8 @@ public sealed partial class MainView
     JsonObject settings = new();
     JsonObject? last;
     JsonArray adapterList = new();
-    bool running, ready, polling, savePending, shownUpdated, closing, engineGone;
+    bool running, ready, polling, savePending, shownUpdated, closing, engineGone, quiet;
+    int changes;                                   // counts local setting changes, to spot out-of-date statuses
 
     // parts of the window that change
     Border powerHalo = null!;
@@ -72,7 +73,7 @@ public sealed partial class MainView
     {
         public required string Key;
         public required TextBlock Status;
-        public required Button Setup;
+        public required Button Setup, Fix;
         public required ToggleSwitch Switch;
     }
 
@@ -188,6 +189,7 @@ public sealed partial class MainView
             _ => dark ?? Application.Current.RequestedTheme == ApplicationTheme.Dark,
         };
         p = isDark ? Palette.DarkMode : Palette.LightMode;
+        Ui.Dark = isDark;
         root = new Grid
         {
             RequestedTheme = theme,
@@ -267,7 +269,7 @@ public sealed partial class MainView
             FillSettings();
             BuildApps();
         }
-        if (last != null) Render(last);
+        if (last != null) Render(last, false);
         split.IsPaneOpen = settingsOpen;
     }
 
@@ -389,7 +391,8 @@ public sealed partial class MainView
         polling = true;
         try
         {
-            if (await engine.CallAsync("status") is JsonObject s && !s.Bool("hidden")) Render(s);
+            int asked = changes;
+            if (await engine.CallAsync("status") is JsonObject s && !s.Bool("hidden")) Render(s, asked == changes);
         }
         catch (EngineError e)
         {
@@ -405,6 +408,7 @@ public sealed partial class MainView
 
     void Save(JsonObject patch)
     {
+        changes++;
         foreach (var (k, v) in patch) settings[k] = v?.DeepClone();
         UpdateBalancingRows();
         savePending = true;
@@ -414,6 +418,7 @@ public sealed partial class MainView
 
     async Task SaveNow(JsonObject? patch, bool fromTimer = false)
     {
+        changes++;
         if (patch != null)
             foreach (var (k, v) in patch) settings[k] = v?.DeepClone();
         saveTimer.Stop();
@@ -422,6 +427,7 @@ public sealed partial class MainView
             var res = await engine.CallAsync("save_settings", settings.DeepClone());
             savePending = false;
             settings = res.Obj("settings");
+            changes++;                                         // statuses asked for before this are out of date
             var error = res.Str("error");
             if (error != "")
             {
@@ -451,7 +457,8 @@ public sealed partial class MainView
                 if (msg.Contains("Settings")) OpenSettings(true);
             }
             else if (msg != "") Toast(msg);
-            if (await engine.CallAsync("status") is JsonObject s) Render(s);
+            int asked = changes;
+            if (await engine.CallAsync("status") is JsonObject s) Render(s, asked == changes);
         }
         catch (EngineError e)
         {
@@ -465,7 +472,9 @@ public sealed partial class MainView
     }
 
     // ---- showing the status ------------------------------------------------------------------ //
-    void Render(JsonObject s)
+    /// <param name="current">False when the settings changed while the status was on its way: its app
+    /// switches may show the old state, so they're left alone this time.</param>
+    void Render(JsonObject s, bool current = true)
     {
         last = s;
         running = s.Bool("running");
@@ -489,7 +498,7 @@ public sealed partial class MainView
         Ui.SetRich(stateText, state, p.Text);
         RenderTiles(links);
         chart.Update(links.Select(l => l.Arr("history").Select(x => x.AsNum()).ToArray()).ToList());
-        RenderApps(s);
+        RenderApps(s, current);
         restartNote.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
         switch (modalKind)
         {
@@ -609,11 +618,14 @@ public sealed partial class MainView
             if (i > 0) appRows.Children.Add(Ui.Divider(p.Line));
             var status = Ui.T("", 12, p.Muted);
             var setup = Ui.Btn("Set up", () => OpenGuide(a.Key), small: true);
+            var fix = Ui.Btn("Fix", () => OpenGuide(a.Key), small: true);
+            Ui.Paint(fix, p.Warn, p.Dark ? Palette.Hex("#1b1600") : Colors.White);
+            fix.Visibility = Visibility.Collapsed;
             var sw = Ui.Switch($"Use DualLink with {a.Name}");
             sw.IsOn = AppOn(a.Key);
             sw.Toggled += (_, _) =>
             {
-                if (sw.IsOn == AppOn(a.Key)) return;           // set by the window itself
+                if (quiet || sw.IsOn == AppOn(a.Key)) return;  // set by the window itself
                 SetApp(a.Key, sw.IsOn);
             };
             var g = Ui.Columns(Ui.Auto, Ui.Star(), Ui.Auto, Ui.Auto);
@@ -621,11 +633,12 @@ public sealed partial class MainView
             g.Children.Add(Ui.Badge(a.Badge, Palette.Hex(a.Color)).At(0));
             g.Children.Add(Ui.V(1, Ui.T(a.Name, 13.5, p.Text, 600), status).At(1));
             g.Children.Add(setup.At(2));
+            g.Children.Add(fix.At(2));
             g.Children.Add(sw.At(3));
             appRows.Children.Add(g);
-            appViews.Add(new AppRow { Key = a.Key, Status = status, Setup = setup, Switch = sw });
+            appViews.Add(new AppRow { Key = a.Key, Status = status, Setup = setup, Fix = fix, Switch = sw });
         }
-        if (last != null) RenderApps(last);
+        if (last != null) RenderApps(last, false);
     }
 
     void SetApp(string key, bool on)
@@ -642,7 +655,7 @@ public sealed partial class MainView
         }
     }
 
-    void RenderApps(JsonObject s)
+    void RenderApps(JsonObject s, bool current)
     {
         if (string.Join(",", ShownApps().Select(a => a.Key)) != appSig)
         {
@@ -654,11 +667,14 @@ public sealed partial class MainView
         {
             var key = row.Key;
             bool on = key == "qbt" ? s.Bool("qbt_auto") : s.Obj("apps").Bool(key);
-            if (!savePending && row.Switch.IsOn != on)
+            if (current && !savePending && row.Switch.IsOn != on)
             {
-                settings[SettingKey(key)] = on;
+                settings[SettingKey(key)] = on;                  // changed somewhere else
+                quiet = true;
                 row.Switch.IsOn = on;
+                quiet = false;
             }
+            else on = row.Switch.IsOn;
             var live = s.Obj("app_live").Obj(key);
             double n = live.Num("connections");
             var programs = live.Arr("programs").Select(x => x.AsStr()).ToList();
@@ -698,7 +714,8 @@ public sealed partial class MainView
             }
             row.Status.Text = t;
             row.Status.Foreground = Ui.B(color);
-            row.Setup.Content = fix ? "Fix" : "Set up";
+            row.Setup.Visibility = fix ? Visibility.Collapsed : Visibility.Visible;
+            row.Fix.Visibility = fix ? Visibility.Visible : Visibility.Collapsed;
         }
     }
 

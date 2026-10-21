@@ -238,7 +238,10 @@ public sealed partial class MainView
                      "Tick <b>Bypass authentication for clients on localhost</b>", "Click <b>OK</b>"]));
         qbtTest = Ui.Btn("Test connection", () => _ = TestQbt(), primary: true, small: true);
         qbtResult = Ui.T("", 12.5, p.Muted, wrap: true);
-        var testRow = Ui.H(10, qbtTest, qbtResult);
+        var testRow = Ui.Columns(Ui.Auto, Ui.Star());          // the result wraps instead of being cut off
+        testRow.ColumnSpacing = 10;
+        testRow.Children.Add(qbtTest.At(0));
+        testRow.Children.Add(qbtResult.At(1));
         testRow.Margin = new Thickness(0, 6, 0, 0);
         var (s2, m2) = Step(2, StepTitle("Check that DualLink can reach it"), testRow);
         var (s3, m3) = Step(3, StepTitle("That's it"),
@@ -564,16 +567,15 @@ public sealed partial class MainView
         if (sig == speedSig) return;
         speedSig = sig;
         speedBody.Children.Clear();
-        var d = dialog;
+        var d = dialog;                                        // (its button stays enabled: pressing it during a
+                                                               // test does nothing, and re-enabling loses the colour)
         if (st.Bool("running"))
         {
             var ring = new ProgressRing { IsActive = true, Width = 18, Height = 18 };
             speedBody.Children.Add(Ui.H(10, ring, Ui.T($"Testing {st.Str("phase")}… about 5 seconds per connection.", 13, p.Muted)));
-            if (d != null && modalKind == "speed") d.IsPrimaryButtonEnabled = false;
             speedFoot.Text = "";
             return;
         }
-        if (d != null && modalKind == "speed") d.IsPrimaryButtonEnabled = true;
         var intro = Ui.T("Measures how fast each connection can download on its own, one after the other. For accurate results, " +
                          "pause big downloads first. The hotspot part uses a few dozen MB of mobile data.", 12.5, p.Muted, wrap: true);
         intro.Margin = new Thickness(0, 2, 0, 10);

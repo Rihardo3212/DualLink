@@ -18,10 +18,11 @@ public sealed class DemoEngine : IEngine
         ["port"] = 1080, ["qbt_auto"] = true, ["qbt_url"] = "http://127.0.0.1:8080", ["qbt_user"] = "", ["qbt_pass"] = "",
         ["reconnect"] = true, ["tray"] = true, ["autostart"] = true, ["tray_hint_shown"] = true,
         ["fdm"] = true, ["jd"] = false, ["idm"] = false, ["firefox"] = false, ["other"] = false,
-        ["auto_on_hotspot"] = true, ["auto_on_start"] = false, ["check_updates"] = true, ["native_window"] = true,
+        ["auto_on_hotspot"] = true, ["auto_on_start"] = false, ["check_updates"] = true,
     };
 
     bool running = true;
+    bool checkedUpdates;
     readonly DateTime started = DateTime.UtcNow;
     JsonObject speedtest = new() { ["running"] = false, ["phase"] = "", ["result"] = null };
     DateTime? speedtestEnds;
@@ -60,6 +61,7 @@ public sealed class DemoEngine : IEngine
                 speedtestEnds = DateTime.UtcNow.AddSeconds(4);
                 return new JsonObject { ["ok"] = true };
             case "check_updates":
+                checkedUpdates = true;
                 return new JsonObject { ["ok"] = true, ["update"] = Update() };
             case "start_update":
                 return new JsonObject { ["ok"] = false, ["message"] = "This is a demo - nothing to install." };
@@ -75,9 +77,9 @@ public sealed class DemoEngine : IEngine
 
     static JsonObject Update() => new()
     {
-        ["version"] = "1.11.1",
-        ["url"] = "https://github.com/Rihardo3212/DualLink/releases/tag/v1.11.1",
-        ["notes"] = "## What's Changed\n* Faster start of the new window\n* Fix the tray tooltip with three connections\n\n**Full Changelog**: https://github.com/Rihardo3212/DualLink/compare/v1.11.0...v1.11.1",
+        ["version"] = "1.12.1",
+        ["url"] = "https://github.com/Rihardo3212/DualLink/releases/tag/v1.12.1",
+        ["notes"] = "## What's Changed\n* Faster start of the new window\n* Fix the tray tooltip with three connections\n\n**Full Changelog**: https://github.com/Rihardo3212/DualLink/compare/v1.12.0...v1.12.1",
     };
 
     JsonObject Status()
@@ -140,10 +142,10 @@ public sealed class DemoEngine : IEngine
                 ["fdm"] = settings.Bool("fdm"), ["jd"] = settings.Bool("jd"), ["idm"] = settings.Bool("idm"),
                 ["firefox"] = settings.Bool("firefox"), ["other"] = settings.Bool("other"),
             },
-            ["speedtest"] = speedtest.DeepClone(), ["update"] = Update(),
+            ["speedtest"] = speedtest.DeepClone(), ["update"] = checkedUpdates ? Update() : null,
             ["update_state"] = new JsonObject { ["phase"] = "idle", ["done"] = 0, ["total"] = 0, ["message"] = "" },
-            ["just_updated"] = false, ["version"] = "1.11.0", ["qbt_auto"] = settings.Bool("qbt_auto"),
-            ["standby"] = false, ["standby_error"] = null, ["native_available"] = true,
+            ["just_updated"] = false, ["version"] = "1.12.0", ["qbt_auto"] = settings.Bool("qbt_auto"),
+            ["standby"] = false, ["standby_error"] = null,
         };
     }
 

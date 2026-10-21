@@ -12,7 +12,7 @@ public sealed partial class MainView
     HyperlinkButton addExtra = null!;
     TextBlock extraHint = null!, restartNote = null!, verText = null!;
     ToggleSwitch sAuto = null!, sRecycle = null!, sOnHotspot = null!, sOnStart = null!, sTray = null!, sAutostart = null!,
-        sNative = null!, sUpdates = null!;
+        sUpdates = null!;
     FrameworkElement recycleRow = null!;
     Grid manualShares = null!;
     NumberBox nShareEth = null!, nShareHot = null!, nQuota = null!, nPort = null!;
@@ -78,20 +78,11 @@ public sealed partial class MainView
         // app
         sTray = BoundSwitch("tray", "Keep running in the tray when closed");
         sAutostart = BoundSwitch("autostart", "Start with Windows");
-        sNative = Ui.Switch("Use the new window");
-        sNative.Toggled += (_, _) =>
-        {
-            if (filling || sNative.IsOn == settings.Bool("native_window")) return;
-            // DualLink switches windows right after saving, so save straight away
-            _ = SaveNow(Patch("native_window", sNative.IsOn));
-            if (!sNative.IsOn) Toast("Switching back to the classic window…");
-        };
         nPort = Number(1024, 65535, 1);
         nPort.ValueChanged += (_, e) => { if (!filling) Save(Patch("port", double.IsNaN(e.NewValue) ? 1080 : (int)e.NewValue)); };
         var app = Section("App", false,
             ToggleRow("Keep running in the tray when closed", null, sTray),
             ToggleRow("Start with Windows", null, sAutostart),
-            ToggleRow("Use the new window (preview)", "Built natively for Windows. Turn off to go back to the classic window.", sNative),
             Field("Proxy port", nPort));
 
         // updates
@@ -276,7 +267,6 @@ public sealed partial class MainView
             sOnHotspot.IsOn = settings.Bool("auto_on_hotspot");
             sOnStart.IsOn = settings.Bool("auto_on_start");
             sUpdates.IsOn = settings.Bool("check_updates");
-            sNative.IsOn = settings.Bool("native_window") || !settings.Has("native_window");
         }
         finally
         {

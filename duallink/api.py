@@ -1,7 +1,7 @@
 """The engine's local control API.
 
-The background engine (proxy, balancing, tray icon) and the window are separate processes. The window - and
-later a native window - asks the engine for everything over a small HTTP API on 127.0.0.1:
+The background engine (proxy, balancing, tray icon) and the window are separate processes. The window
+(native/DualLinkWindow) asks the engine for everything over a small HTTP API on 127.0.0.1:
 
     POST http://127.0.0.1:<port>/api/<name>      X-DualLink-Token: <token>      {"args": [...]}
     -> {"ok": true, "result": ...}   or   {"ok": false, "error": "..."}
@@ -12,7 +12,6 @@ a browser can't reach it.
 """
 import hmac
 import http.client
-import inspect
 import json
 import os
 import queue
@@ -34,7 +33,7 @@ def engine_file():
 
 
 class Api:
-    """What the interface can ask for (in the page: window.pywebview.api.<name>())."""
+    """What the window can ask for (see native/DualLinkWindow/Engine.cs)."""
 
     PAGE = ("get_init", "status", "refresh_adapters", "save_settings", "power", "retry_qbt", "test_qbt",
             "start_speed_test", "check_updates", "start_update", "open_url", "traffic_check", "copy")
@@ -262,7 +261,7 @@ class ControlServer:
             pass
 
 
-# ---- client (runs in the window) ------------------------------------------------------------ #
+# ---- client (for tests and tools; the window has its own in C#) ------------------------------------ #
 class EngineError(Exception):
     pass
 
@@ -344,37 +343,3 @@ class EngineClient:
                 self._pool.get_nowait().close()
             except queue.Empty:
                 return
-
-
-def _remote(name, signature):
-    def method(self, *args):
-        return self._client.call(name, *args)
-    method.__name__ = method.__qualname__ = name
-    method.__signature__ = signature              # same parameters as Api.<name>, for pywebview
-    return method
-
-
-class RemoteApi:
-    """The window's js_api: the same methods as Api, each one answered by the engine."""
-
-    def __init__(self, client, visible=lambda: True):
-        self._client = client
-        self._visible = visible
-
-    def status(self):
-        if not self._visible():
-            return {"hidden": True}               # minimised: nothing to draw, don't ask the engine
-        return self._client.call("status")
-
-    # done by the window itself: it's in front, so the browser it opens comes to the front too
-    def open_url(self, url):
-        return open_github_url(url)
-
-    def copy(self, text):
-        return copy_text(text)
-
-
-for _name in Api.PAGE:
-    if _name not in RemoteApi.__dict__:
-        setattr(RemoteApi, _name, _remote(_name, inspect.signature(getattr(Api, _name))))
-del _name

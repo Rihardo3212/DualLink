@@ -27,28 +27,19 @@ jobs:
         run: python -m pytest -v
 
       - name: Check the app imports on Windows
-        run: python -c "import webview, pystray, duallink.service, duallink.window, duallink.tray; print('imports ok')"
+        run: python -c "import pystray, duallink.service, duallink.tray; print('imports ok')"
 
       - name: Record which repository this build belongs to (for update checks)
         shell: bash
         run: echo "REPO = \"$GITHUB_REPOSITORY\"" > duallink/_build_info.py
 
-      - name: Build DualLink.exe (standalone, one file)
+      - name: Build DualLink (the engine, as a folder - starts fast, nothing to unpack on each start)
         run: |
           python tools/make_icon.py
-          python -m PyInstaller --noconfirm --onefile --windowed --name DualLink --icon build/icon.ico `
-            --add-data "duallink/ui;duallink/ui" --add-data "duallink/assets;duallink/assets" `
-            --hidden-import pystray._win32 --hidden-import webview.platforms.winforms --hidden-import webview.platforms.edgechromium `
-            --hidden-import duallink._build_info `
-            main.py
-
-      - name: Build the installed version (a folder - starts faster, nothing to unpack on each start)
-        run: |
           python -m PyInstaller --noconfirm --onedir --windowed --name DualLink --icon build/icon.ico `
             --distpath dist/folder --workpath build/folder `
-            --add-data "duallink/ui;duallink/ui" --add-data "duallink/assets;duallink/assets" `
-            --hidden-import pystray._win32 --hidden-import webview.platforms.winforms --hidden-import webview.platforms.edgechromium `
-            --hidden-import duallink._build_info `
+            --add-data "duallink/assets;duallink/assets" `
+            --hidden-import pystray._win32 --hidden-import duallink._build_info `
             main.py
 
       - name: Check the folder build starts
@@ -61,7 +52,7 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      - name: Build the new native window (WinUI 3, compiled ahead of time)
+      - name: Build the window (WinUI 3, compiled ahead of time)
         shell: pwsh
         run: |
           $version = python -c "import duallink; print(duallink.__version__)"
@@ -69,17 +60,17 @@ jobs:
                       "-p:Platform=x64", "-p:Version=$version", "-o", "dist/native")
           dotnet publish @common -p:PublishAot=true
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "::warning::Native AOT build failed - building the native window without AOT instead"
+            Write-Host "::warning::Native AOT build failed - building the window without AOT instead"
             Remove-Item dist/native -Recurse -Force -ErrorAction SilentlyContinue
             dotnet publish @common -p:PublishAot=false
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
           Remove-Item dist/native/*.pdb -ErrorAction SilentlyContinue
           $files = Get-ChildItem dist/native -Recurse -File
-          "Native window: {0:N1} MB in {1} files" -f (($files | Measure-Object Length -Sum).Sum / 1MB), $files.Count
+          "Window: {0:N1} MB in {1} files" -f (($files | Measure-Object Length -Sum).Sum / 1MB), $files.Count
           Copy-Item dist/native dist/folder/DualLink/DualLinkWindow -Recurse
 
-      - name: Screenshots of every screen of the native window (demo data)
+      - name: Screenshots of every screen of the window (demo data)
         shell: pwsh
         continue-on-error: true
         run: |
@@ -88,7 +79,7 @@ jobs:
           if (-not $p.WaitForExit(120000)) { $p.Kill(); Write-Host "::warning::The screenshot run timed out" }
           Get-Content ci/native/shots.log
 
-      - name: Memory report (engine in the tray, then with each window open)
+      - name: Memory report (engine in the tray, then with the window open)
         shell: pwsh
         continue-on-error: true
         run: |
@@ -106,7 +97,7 @@ jobs:
           }
           function MB($b) { [math]::Round($b / 1MB, 1) }
           function WindowMemory() {
-            # the window process the engine started, and everything it started (WebView2)
+            # the window process the engine started (and anything it started)
             $all = Get-CimInstance Win32_Process
             $todo = @($all | Where-Object { $_.ParentProcessId -eq $e.pid -and $_.Name -like "DualLink*.exe" })
             $found = @()
@@ -135,22 +126,11 @@ jobs:
           Write-Host "ping: $((Call ping) | ConvertTo-Json -Compress)"
 
           Call open_window | Out-Null
-          Start-Sleep -Seconds 15
+          Start-Sleep -Seconds 12
           $m = WindowMemory
-          $rows += "| Classic window - only while open ($($m.Count) processes incl. WebView2) | $(MB $m.WS) MB | $(MB $m.Private) MB |"
+          $rows += "| Window - only while open ($($m.Count) process) | $(MB $m.WS) MB | $(MB $m.Private) MB |"
           Screenshot "ci\window.png"
-
-          $status = Call status
-          if ($status.native_available) {
-            Call save_settings '{"args": [{"native_window": true}]}' | Out-Null   # DualLink switches windows
-            Start-Sleep -Seconds 12
-            $m = WindowMemory
-            $rows += "| New native window - only while open ($($m.Count) processes) | $(MB $m.WS) MB | $(MB $m.Private) MB |"
-            Screenshot "ci\native-window.png"
-            Write-Host "ping: $((Call ping) | ConvertTo-Json -Compress)"
-          } else {
-            $rows += "| New native window | not included in this build | |"
-          }
+          Write-Host "ping: $((Call ping) | ConvertTo-Json -Compress)"
           $engine.Refresh()
           $rows += "| Engine with a window open | $(MB $engine.WorkingSet64) MB | $(MB $engine.PrivateMemorySize64) MB |"
 
@@ -180,15 +160,11 @@ jobs:
       - uses: actions/upload-artifact@v5
         with:
           name: DualLink
-          path: |
-            dist/DualLink.exe
-            dist/DualLink-Setup-*.exe
+          path: dist/DualLink-Setup-*.exe
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist/DualLink-Setup-*.exe
-            dist/DualLink.exe
+          files: dist/DualLink-Setup-*.exe
           generate_release_notes: true

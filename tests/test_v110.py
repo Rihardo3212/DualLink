@@ -1,6 +1,6 @@
 """1.10: a small background engine (proxy + tray) and a window that only exists while it's open."""
+import glob
 import http.client
-import inspect
 import json
 import os
 import re
@@ -12,12 +12,13 @@ import time
 import pytest
 
 from duallink import instance
-from duallink.api import Api, ControlServer, EngineClient, EngineError, RemoteApi
+from duallink.api import Api, ControlServer, EngineClient, EngineError
 from duallink.controller import Controller
-from duallink.service import Engine, window_command
+from duallink.service import Engine
 from test_adapters import Adapters, wait_for
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+WINDOW_EXE = os.path.join("C:\\", "Programs", "DualLink", "DualLinkWindow", "DualLinkWindow.exe")
 needs_windows = pytest.mark.skipif(os.name != "nt", reason="Windows only")
 
 
@@ -82,7 +83,7 @@ def test_control_api_listens_on_this_pc_only():
         srv.stop()
 
 
-def test_window_talks_to_engine_through_remote_api(tmp_path):
+def test_engine_answers_the_window(tmp_path):
     ctl = make_ctl(tmp_path)
     api = Api(ctl)
     handlers = {n: getattr(api, n) for n in Api.PAGE}
@@ -93,29 +94,22 @@ def test_window_talks_to_engine_through_remote_api(tmp_path):
         assert json.loads((tmp_path / "engine.json").read_text())["token"] == info["token"]
         client = EngineClient.connect(tmp_path / "engine.json")
         assert client is not None and client.pid == os.getpid()
-        remote = RemoteApi(client)
-        for name in Api.PAGE:                                   # same methods and parameters as Api
-            assert inspect.signature(getattr(remote, name)) == inspect.signature(getattr(api, name)), name
-            assert inspect.ismethod(getattr(remote, name))      # what pywebview looks for
-            assert inspect.getfullargspec(getattr(remote, name)).args == inspect.getfullargspec(getattr(api, name)).args
-        assert [n for n in dir(remote) if not n.startswith("_")] == sorted(Api.PAGE)   # nothing else exposed
-        assert remote.status()["running"] is False
-        assert remote.get_init()["settings"]["eth_name"] == "Ethernet"
-        res = remote.save_settings({"quota_mb": 500})
+        assert client.call("status")["running"] is False
+        assert client.call("get_init")["settings"]["eth_name"] == "Ethernet"
+        res = client.call("save_settings", {"quota_mb": 500})
         assert res["error"] is None and ctl.cfg["quota_mb"] == 500
-        assert remote.save_settings({"extra": ["Ethernet"]})["error"]      # validation errors come back
-        assert remote.power(True)["ok"] and ctl.running
-        assert remote.status()["running"] is True
-        assert remote.power(False)["ok"] is not None and not ctl.running
-        assert remote.open_url("https://evil.example/") is False
-        assert RemoteApi(client, visible=lambda: False).status() == {"hidden": True}
+        assert client.call("save_settings", {"extra": ["Ethernet"]})["error"]      # validation errors come back
+        assert client.call("power", True)["ok"] and ctl.running
+        assert client.call("status")["running"] is True
+        assert client.call("power", False)["ok"] is not None and not ctl.running
+        assert client.call("open_url", "https://evil.example/") is False
 
         results, errors = [], []
 
         def poll():
             try:
                 for _ in range(10):
-                    results.append(remote.status()["version"])
+                    results.append(client.call("status")["version"])
             except Exception as e:  # noqa: BLE001
                 errors.append(e)
         threads = [threading.Thread(target=poll) for _ in range(8)]
@@ -134,7 +128,7 @@ def test_window_talks_to_engine_through_remote_api(tmp_path):
     assert not (tmp_path / "engine.json").exists()
     t0 = time.monotonic()
     with pytest.raises(EngineError, match="isn't responding"):
-        remote.status()                                          # engine gone: a clear error, quickly
+        client.call("status")                                    # engine gone: a clear error, quickly
     assert time.monotonic() - t0 < 5
 
 
@@ -148,10 +142,17 @@ def test_no_engine_found(tmp_path):
     assert time.monotonic() - t0 < 3
 
 
-def test_page_uses_only_api_methods():
-    with open(os.path.join(ROOT, "duallink", "ui", "index.html"), encoding="utf-8") as f:
-        used = set(re.findall(r"\bapi\.(\w+)\(", f.read()))
-    assert used and used <= set(Api.PAGE), used - set(Api.PAGE)
+def test_window_asks_only_for_what_the_engine_answers():
+    """Every request in the C# window's code exists in the engine (and in the window's demo data)."""
+    code = ""
+    for path in glob.glob(os.path.join(ROOT, "native", "DualLinkWindow", "*.cs")):
+        with open(path, encoding="utf-8") as f:
+            code += f.read()
+    asked = set(re.findall(r'CallAsync\("(\w+)"', code)) | {"get_init", "status"}
+    answered = set(Api.PAGE) | {"ping", "window_closed", "open_window", "quit"}
+    assert asked <= answered, asked - answered
+    demo = set(re.findall(r'case "(\w+)":', code))
+    assert asked <= demo, asked - demo
 
 
 # ---- engine ------------------------------------------------------------------------------- #
@@ -207,7 +208,7 @@ def make_engine(tmp_path, minimized=False, tray=True):
         trays.append(FakeTray(**cb))
         return trays[-1]
     eng = Engine(ctl=make_ctl(tmp_path), minimized=minimized, spawner=spawner, tray_factory=tray_factory,
-                 info_path=tmp_path / "engine.json", tip_every=0.1)
+                 info_path=tmp_path / "engine.json", tip_every=0.1, window=lambda: WINDOW_EXE)
     return eng, procs, trays
 
 
@@ -215,7 +216,7 @@ def test_engine_opens_one_window_and_reopens_after_close(tmp_path):
     eng, procs, trays = make_engine(tmp_path)
     try:
         eng.start()
-        assert len(procs) == 1 and procs[0].cmd[-1] == "--window"
+        assert len(procs) == 1 and procs[0].cmd == WINDOW_EXE
         assert eng.ping()["window"] is True
         eng.open_window()                                        # already open: brought to the front instead
         trays[0].cb["on_open"]()
@@ -306,28 +307,10 @@ def test_updated_engine_says_so(tmp_path):
 def test_engine_stays_light():
     """The engine never loads the window's libraries, which is where most of the memory went."""
     code = ("import sys; import duallink.service, duallink.tray, duallink.api; "
-            "print(','.join(m for m in ('webview', 'pystray', 'PIL', 'clr', 'duallink.window') if m in sys.modules))")
+            "print(','.join(m for m in ('webview', 'pystray', 'PIL', 'clr') if m in sys.modules))")
     out = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True, timeout=60)
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip() == ""
-
-
-def test_window_process_skips_engine_code():
-    code = ("import sys; import duallink.window; "
-            "print(','.join(m for m in ('duallink.controller', 'duallink.engine', 'duallink.qbt') if m in sys.modules))")
-    out = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True, timeout=60)
-    assert out.returncode == 0, out.stderr
-    assert out.stdout.strip() == ""
-
-
-def test_window_command():
-    cmd = window_command()
-    assert cmd[0] == sys.executable and cmd[-1] == "--window" and cmd[1].endswith("main.py")
-    sys.frozen = True                                            # as in DualLink.exe
-    try:
-        assert window_command() == [sys.executable, "--window"]
-    finally:
-        del sys.frozen
 
 
 def test_on_exit_notices_the_engine_ending():
@@ -336,102 +319,6 @@ def test_on_exit_notices_the_engine_ending():
     ended = threading.Event()
     instance.on_exit(p.pid, ended.set, poll=0.1)
     assert ended.wait(10)
-
-
-# ---- the window process ---------------------------------------------------------------------- #
-class _Event:
-    def __init__(self):
-        self.handlers = []
-
-    def __iadd__(self, handler):
-        self.handlers.append(handler)
-        return self
-
-    def fire(self):
-        for h in self.handlers:
-            h()
-
-
-def fake_webview(script):
-    """A stand-in for pywebview: start() runs `script(window)` instead of showing a real window."""
-    import types
-    mod = types.ModuleType("webview")
-
-    class Window:
-        def __init__(self, url, js_api, kw):
-            self.url, self.js_api, self.kw, self.destroyed = url, js_api, kw, False
-            self.events = types.SimpleNamespace(**{n: _Event() for n in
-                                                   ("closed", "minimized", "restored", "shown", "maximized")})
-
-        def show(self):
-            pass
-
-        def restore(self):
-            pass
-
-        def destroy(self):
-            self.destroyed = True
-
-    def create_window(title, url, js_api=None, **kw):
-        mod.window = Window(url, js_api, kw)
-        return mod.window
-
-    mod.create_window = create_window
-    mod.start = lambda: script(mod.window)
-    return mod
-
-
-def test_window_process_round_trip(tmp_path, monkeypatch):
-    monkeypatch.setenv("APPDATA", str(tmp_path))
-    from duallink import window
-    eng, procs, trays = make_engine(tmp_path, minimized=True)
-    eng._info_path = None                                       # engine.json where the window looks for it
-    seen = {}
-
-    def script(w):
-        seen["version"] = w.js_api.status()["version"]          # the page's first poll reaches the engine
-        w.events.minimized.fire()
-        seen["minimised"] = w.js_api.status()
-        w.events.restored.fire()
-        seen["init"] = sorted(w.js_api.get_init())
-        w.events.closed.fire()                                  # user closes the window
-    fake = fake_webview(script)
-    old = sys.modules.get("webview")
-    sys.modules["webview"] = fake
-    try:
-        eng.start()
-        assert (tmp_path / "DualLink" / "engine.json").exists()
-        assert window.run() == 0
-        assert seen == {"version": eng.ping()["version"], "minimised": {"hidden": True},
-                        "init": ["adapters", "settings"]}
-        assert os.path.exists(fake.window.url) and fake.window.url.endswith("index.html")
-        assert fake.window.kw["min_size"] == (720, 560)
-        assert "DualLink is still running" in trays[0].notes      # the engine heard about the close
-        assert not eng.stopped.is_set()
-    finally:
-        instance.release(instance.WINDOW_MUTEX)
-        if old is None:
-            sys.modules.pop("webview", None)
-        else:
-            sys.modules["webview"] = old
-        eng.quit()
-
-
-def test_window_without_engine_starts_the_engine(tmp_path, monkeypatch):
-    import types
-    monkeypatch.setenv("APPDATA", str(tmp_path))
-    from duallink import window
-    started = []
-    monkeypatch.setattr(window, "subprocess", types.SimpleNamespace(
-        Popen=lambda cmd, **kw: started.append((cmd, kw))))
-    t0 = time.monotonic()
-    assert window.run() == 0                                   # nothing to show yet: the engine opens the window
-    assert time.monotonic() - t0 < 10
-    assert len(started) == 1
-    cmd, kw = started[0]
-    assert cmd == window.engine_command() and "--window" not in cmd
-    assert kw["env"].get("PYINSTALLER_RESET_ENVIRONMENT") == "1"   # it must outlive this window process
-    assert not instance.held(instance.WINDOW_MUTEX)
 
 
 # ---- Windows only (GitHub's Windows machine) ------------------------------------------------- #

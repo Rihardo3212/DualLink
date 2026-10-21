@@ -39,7 +39,6 @@ DEFAULTS = {
     "auto_on_hotspot": True,   # turn on when the hotspot connects
     "auto_on_start": False,    # turn on when DualLink starts
     "check_updates": True,
-    "native_window": False,    # use the native Windows window (preview) when it's installed
     "learned": {},             # adapter name -> {"per_conn": bytes/s per connection, "ts": epoch} (internal)
     "speedtest": None,         # last speed test result (internal)
     "seen_apps": {},           # app key -> last time it was seen connected to DualLink (internal)
@@ -121,7 +120,6 @@ class Controller:
         self._quota_warned = False
         self._sync_links()
         self.app_live = {}                        # live app status (who is connected to DualLink right now)
-        self.native_available = False             # set by the engine: the native window is installed
         self.ui_visible = True                    # False while the window is hidden in the tray or minimised
         self.app_every = 5.0
         self.app_probe = None                     # override for tests; default: diag.proxy_clients
@@ -746,7 +744,6 @@ class Controller:
             "qbt_auto": bool(self.cfg.get("qbt_auto")),
             "standby": (not self.running) and self.proxy_up(),
             "standby_error": self.standby_error,
-            "native_available": self.native_available,
         }
 
     # ---- traffic check --------------------------------------------------------- #

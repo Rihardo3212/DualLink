@@ -1,9 +1,10 @@
 """DualLink's background engine: the proxy, balancing, qBittorrent set-up, the tray icon and the control API.
 
-It never loads the window's libraries (WebView2, .NET, Pillow), so it stays small while DualLink sits in the
-tray. The window is a separate process that exists only while it's open: the web window (``DualLink.exe
---window``) or, when "Use the new window" is on and it's installed, the native one (DualLinkWindow.exe).
+It never loads any window libraries, so it stays small while DualLink sits in the tray. The window
+(DualLinkWindow\\DualLinkWindow.exe, a native Windows app) is a separate process that exists only while it's
+open; it asks the engine for everything over the control API.
 """
+import glob
 import os
 import subprocess
 import sys
@@ -14,6 +15,9 @@ from . import __version__, instance
 from .api import Api, ControlServer
 from .controller import Controller
 
+NATIVE_EXE = "DualLinkWindow.exe"
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 def fmt_speed(b):
     for unit in ("B/s", "KiB/s", "MiB/s", "GiB/s"):
@@ -22,54 +26,37 @@ def fmt_speed(b):
         b /= 1024
 
 
-def _main_script():
-    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main.py")
+def window_path():
+    """DualLink's window: DualLinkWindow\\DualLinkWindow.exe next to DualLink.exe.
 
-
-NATIVE_EXE = "DualLinkWindow.exe"
-
-
-def native_window_path():
-    """The native window (DualLinkWindow\\DualLinkWindow.exe next to DualLink.exe) if it's installed.
-
-    DUALLINK_NATIVE_WINDOW can point at another copy, for development."""
+    DUALLINK_NATIVE_WINDOW can point at another copy. Running from source, the newest build in the repository
+    is used (dist\\native, or Visual Studio's bin folder)."""
     env = os.environ.get("DUALLINK_NATIVE_WINDOW")
     if env:
         return env if os.path.isfile(env) else None
     if getattr(sys, "frozen", False):
         path = os.path.join(os.path.dirname(sys.executable), "DualLinkWindow", NATIVE_EXE)
         return path if os.path.isfile(path) else None
-    return None
+    builds = [os.path.join(REPO, "dist", "native", NATIVE_EXE)]
+    builds += glob.glob(os.path.join(REPO, "native", "DualLinkWindow", "bin", "**", NATIVE_EXE), recursive=True)
+    builds = [b for b in builds if os.path.isfile(b)]
+    return max(builds, key=os.path.getmtime) if builds else None
 
 
-def window_command(native_exe=None):
-    if native_exe:
-        return [native_exe]
-    if getattr(sys, "frozen", False):
-        return [sys.executable, "--window"]
-    return [sys.executable, _main_script(), "--window"]
-
-
-def spawn(cmd):
-    """Start the window. The web window shares this process's unpacked files; the native one is its own app."""
-    native = os.path.basename(cmd[0]).lower() == NATIVE_EXE.lower()
-    env = None
-    if native:
-        from .updates import independent_env
-        env = independent_env()
-    flags = 0 if (native or getattr(sys, "frozen", False)) else getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    return subprocess.Popen(cmd, close_fds=True, creationflags=flags, env=env)
+def spawn(exe):
+    """Start the window as its own app (it doesn't share anything with this process)."""
+    from .updates import independent_env
+    return subprocess.Popen([exe], close_fds=True, env=independent_env())
 
 
 class Engine:
     def __init__(self, ctl=None, minimized=False, updated=False, spawner=spawn, tray_factory=None,
-                 info_path=None, tip_every=2.0, native=native_window_path):
+                 info_path=None, tip_every=2.0, window=window_path):
         self.ctl = ctl or Controller()
         self.api = Api(self.ctl)
         self.minimized, self.updated = minimized, updated
         self._spawn = spawner
-        self._native = native                 # where the native window is (None: not installed)
-        self.native_failed = False            # it didn't start once: use the web window until DualLink restarts
+        self._window_path = window
         self._closed_by_us = set()
         self._tray_factory = tray_factory
         self._info_path = info_path
@@ -81,14 +68,13 @@ class Engine:
         self.stopped = threading.Event()
         handlers = {name: getattr(self.api, name) for name in Api.PAGE}
         handlers.update(ping=self.ping, open_window=self.open_window, window_closed=self.window_closed,
-                        quit=self.quit_soon, save_settings=self.save_settings)
+                        quit=self.quit_soon)
         self.server = ControlServer(handlers)
-        self.ctl.ui_visible = True            # the window process knows when it's minimised
+        self.ctl.ui_visible = True            # the window knows when it's minimised
         self.ctl.notify = self.notify
         self.ctl.on_change = self._refresh_tray
         self.ctl.quit_app = self._quit_for_update
         self.ctl.just_updated = updated
-        self.ctl.native_available = bool(self._native())
 
     # ---- control API extras ---------------------------------------------------------------- #
     def ping(self):
@@ -107,22 +93,20 @@ class Engine:
             if self.window_open() or instance.held(instance.WINDOW_MUTEX):
                 instance.signal_show(instance.WINDOW_SHOW)
                 return {"ok": True, "opened": False}
-            exe = self._native() if (self.ctl.cfg.get("native_window") and not self.native_failed) else None
+            exe = self._window_path()
+            if not exe:
+                self.notify("DualLink's window is missing", "Reinstall DualLink from its GitHub Releases page.")
+                return {"ok": False, "message": "DualLink's window is missing."}
             try:
-                self.window = proc = self._spawn(window_command(exe))
+                self.window = proc = self._spawn(exe)
             except OSError as e:
-                if exe:                       # the native window can't start: use the web window
-                    self.native_failed = True
-                    exe = None
-                    self.window = proc = self._spawn(window_command())
-                else:
-                    self.notify("DualLink couldn't open its window", str(e))
-                    return {"ok": False, "message": str(e)}
+                self.notify("DualLink couldn't open its window", str(e))
+                return {"ok": False, "message": str(e)}
             instance.allow_foreground(getattr(proc, "pid", None))
-        threading.Thread(target=self._wait_window, args=(proc, bool(exe), time.monotonic()), daemon=True).start()
-        return {"ok": True, "opened": True, "native": bool(exe)}
+        threading.Thread(target=self._wait_window, args=(proc, time.monotonic()), daemon=True).start()
+        return {"ok": True, "opened": True}
 
-    def _wait_window(self, proc, native=False, started=0.0):
+    def _wait_window(self, proc, started=0.0):
         code = None
         try:
             code = proc.wait()
@@ -133,27 +117,10 @@ class Engine:
                 self.window = None
             closed_by_us = id(proc) in self._closed_by_us
             self._closed_by_us.discard(id(proc))
-        # the new (preview) window crashed while starting: fall back to the classic one
-        if native and code not in (0, None) and not closed_by_us and not self.quitting \
-                and time.monotonic() - started < 10:
-            self.native_failed = True
-            self.notify("The new window couldn't start", "DualLink opened the classic window instead.")
-            self.open_window()
-
-    def save_settings(self, new):
-        """Api.save_settings, and switch windows when "Use the new window" changes."""
-        before = bool(self.ctl.cfg.get("native_window"))
-        result = self.api.save_settings(new)
-        if bool(self.ctl.cfg.get("native_window")) != before:
-            self.native_failed = False        # trying again is allowed
-            if self.window_open():
-                threading.Thread(target=self._switch_window, daemon=True).start()
-        return result
-
-    def _switch_window(self):
-        time.sleep(0.4)                       # let the reply reach the window first
-        self._close_window()
-        self.open_window()
+        if code not in (0, None) and not closed_by_us and not self.quitting and time.monotonic() - started < 10:
+            # it crashed while starting: say so (DualLink itself keeps working from the tray)
+            self.notify("DualLink's window couldn't start",
+                        "Downloads keep working. Try opening it again from the tray icon, or reinstall DualLink.")
 
     def window_closed(self):
         """The window process tells us the user closed the window."""
