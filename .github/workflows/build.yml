@@ -14,9 +14,9 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -57,7 +57,7 @@ jobs:
           $p = Start-Process -FilePath dist\folder\DualLink\DualLink.exe -ArgumentList "--cleanup" -PassThru -Wait
           if ($p.ExitCode -ne 0) { Write-Error "DualLink.exe --cleanup exited with $($p.ExitCode)"; exit 1 }
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
 
@@ -162,7 +162,7 @@ jobs:
           $rows | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
           $rows | Write-Host
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: ci-report
@@ -177,7 +177,7 @@ jobs:
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" installer\DualLink.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: DualLink
           path: |

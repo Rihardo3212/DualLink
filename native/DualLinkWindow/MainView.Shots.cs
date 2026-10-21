@@ -53,6 +53,8 @@ public sealed partial class MainView
             await Task.Delay(400);
             OpenQbtSetup();
             await Shot("04-qbittorrent-setup", 1000);
+            if (qbtAdvanced != null) qbtAdvanced.IsExpanded = true;      // taller than the window: must scroll
+            await Shot("04b-qbittorrent-different-port", 1400);
             OpenGuide("fdm");
             await Shot("05-fdm-setup", 1000);
             OpenMoreApps();

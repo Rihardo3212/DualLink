@@ -53,10 +53,29 @@ public sealed partial class MainView
 
     void CloseDialog() => dialog?.Hide();
 
+    // The dialog's own content area doesn't scroll, so each dialog gets a scroll area of its own:
+    // otherwise anything taller than the window (like the opened "different port" section) is cut off.
     ContentDialog NewDialog(string title, UIElement content, string close = "Done") => new()
     {
-        Title = title, Content = content, CloseButtonText = close, DefaultButton = ContentDialogButton.None,
+        Title = title, Content = Scrollable(content), CloseButtonText = close, DefaultButton = ContentDialogButton.None,
     };
+
+    static ScrollViewer Scrollable(UIElement content) => new()
+    {
+        Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollMode = ScrollMode.Auto,
+        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, HorizontalScrollMode = ScrollMode.Disabled,
+        Padding = new Thickness(0, 0, 14, 0),                  // room for the scroll bar
+    };
+
+    /// <summary>Once an expanding section has opened, scroll so all of it shows.</summary>
+    void ShowWhenOpened(FrameworkElement element)
+    {
+        var t = queue.CreateTimer();
+        t.Interval = TimeSpan.FromMilliseconds(380);           // after the opening animation
+        t.IsRepeating = false;
+        t.Tick += (_, _) => element.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = true });
+        t.Start();
+    }
 
     // ---- pieces of the guides ------------------------------------------------------------------- //
     sealed record Socks(string Label);
@@ -194,6 +213,7 @@ public sealed partial class MainView
 
     // ---- qBittorrent -------------------------------------------------------------------------- //
     StepMark[] qbtSteps = [];
+    Expander? qbtAdvanced;
     Button? qbtTest;
     TextBlock? qbtResult;
 
@@ -247,6 +267,8 @@ public sealed partial class MainView
         };
         var foot = Ui.T("qBittorrent needs to be running.", 12, p.Faint);
         foot.Margin = new Thickness(0, 10, 0, 0);
+        qbtAdvanced = advanced;
+        advanced.Expanding += (_, _) => ShowWhenOpened(advanced);
         ShowDialog(NewDialog("Set up qBittorrent", Ui.V(0, s1, s2, s3, advanced, foot)), "qbt");
         RefreshQbtSteps();
     }
