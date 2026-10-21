@@ -57,7 +57,38 @@ jobs:
           $p = Start-Process -FilePath dist\folder\DualLink\DualLink.exe -ArgumentList "--cleanup" -PassThru -Wait
           if ($p.ExitCode -ne 0) { Write-Error "DualLink.exe --cleanup exited with $($p.ExitCode)"; exit 1 }
 
-      - name: Memory report (engine in the tray, then with the window open)
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build the new native window (WinUI 3, compiled ahead of time)
+        shell: pwsh
+        run: |
+          $version = python -c "import duallink; print(duallink.__version__)"
+          $common = @("native/DualLinkWindow/DualLinkWindow.csproj", "-c", "Release", "-r", "win-x64",
+                      "-p:Platform=x64", "-p:Version=$version", "-o", "dist/native")
+          dotnet publish @common -p:PublishAot=true
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::warning::Native AOT build failed - building the native window without AOT instead"
+            Remove-Item dist/native -Recurse -Force -ErrorAction SilentlyContinue
+            dotnet publish @common -p:PublishAot=false
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          Remove-Item dist/native/*.pdb -ErrorAction SilentlyContinue
+          $files = Get-ChildItem dist/native -Recurse -File
+          "Native window: {0:N1} MB in {1} files" -f (($files | Measure-Object Length -Sum).Sum / 1MB), $files.Count
+          Copy-Item dist/native dist/folder/DualLink/DualLinkWindow -Recurse
+
+      - name: Screenshots of every screen of the native window (demo data)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $p = Start-Process -FilePath dist\folder\DualLink\DualLinkWindow\DualLinkWindow.exe `
+                 -ArgumentList "--demo", "--screenshots", "ci/native" -PassThru
+          if (-not $p.WaitForExit(120000)) { $p.Kill(); Write-Host "::warning::The screenshot run timed out" }
+          Get-Content ci/native/shots.log
+
+      - name: Memory report (engine in the tray, then with each window open)
         shell: pwsh
         continue-on-error: true
         run: |
@@ -69,46 +100,63 @@ jobs:
           Start-Sleep -Seconds 8
           $e = Get-Content $info | ConvertFrom-Json
           $h = @{ "X-DualLink-Token" = $e.token }
-          function Call($name) {
-            Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$($e.port)/api/$name" -Headers $h `
-              -ContentType "application/json" -Body '{"args": []}'
+          function Call($name, $body = '{"args": []}') {
+            (Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$($e.port)/api/$name" -Headers $h `
+              -ContentType "application/json" -Body $body).result
           }
           function MB($b) { [math]::Round($b / 1MB, 1) }
-          function TreeOf($rootPid) {
+          function WindowMemory() {
+            # the window process the engine started, and everything it started (WebView2)
             $all = Get-CimInstance Win32_Process
-            $todo = @($all | Where-Object { $_.ParentProcessId -eq $rootPid -and $_.Name -eq "DualLink.exe" })
+            $todo = @($all | Where-Object { $_.ParentProcessId -eq $e.pid -and $_.Name -like "DualLink*.exe" })
             $found = @()
             while ($todo.Count -gt 0) {
               $p = $todo[0]; $found += $p
               $todo = @($todo | Select-Object -Skip 1) + @($all | Where-Object { $_.ParentProcessId -eq $p.ProcessId })
             }
-            return $found
+            $ws = 0; $priv = 0
+            foreach ($p in $found) {
+              $gp = Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue
+              if ($gp) { $ws += $gp.WorkingSet64; $priv += $gp.PrivateMemorySize64 }
+            }
+            return @{ Count = $found.Count; WS = $ws; Private = $priv }
+          }
+          function Screenshot($path) {
+            Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            New-Item -ItemType Directory -Force ci | Out-Null
+            $bmp.Save($path)
           }
           $engine = Get-Process -Id $e.pid
           $rows = @("### DualLink memory", "", "| | Working set | Private |", "|---|---|---|")
           $rows += "| Engine - DualLink in the tray | $(MB $engine.WorkingSet64) MB | $(MB $engine.PrivateMemorySize64) MB |"
           Write-Host "ping: $((Call ping) | ConvertTo-Json -Compress)"
+
           Call open_window | Out-Null
           Start-Sleep -Seconds 15
-          $tree = TreeOf $e.pid
-          $ws = 0; $priv = 0
-          foreach ($p in $tree) {
-            $gp = Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue
-            if ($gp) { $ws += $gp.WorkingSet64; $priv += $gp.PrivateMemorySize64 }
+          $m = WindowMemory
+          $rows += "| Classic window - only while open ($($m.Count) processes incl. WebView2) | $(MB $m.WS) MB | $(MB $m.Private) MB |"
+          Screenshot "ci\window.png"
+
+          $status = Call status
+          if ($status.native_available) {
+            Call save_settings '{"args": [{"native_window": true}]}' | Out-Null   # DualLink switches windows
+            Start-Sleep -Seconds 12
+            $m = WindowMemory
+            $rows += "| New native window - only while open ($($m.Count) processes) | $(MB $m.WS) MB | $(MB $m.Private) MB |"
+            Screenshot "ci\native-window.png"
+            Write-Host "ping: $((Call ping) | ConvertTo-Json -Compress)"
+          } else {
+            $rows += "| New native window | not included in this build | |"
           }
           $engine.Refresh()
-          $rows += "| Window - only while open ($($tree.Count) processes incl. WebView2) | $(MB $ws) MB | $(MB $priv) MB |"
-          $rows += "| Engine with the window open | $(MB $engine.WorkingSet64) MB | $(MB $engine.PrivateMemorySize64) MB |"
-          Write-Host "ping: $((Call ping) | ConvertTo-Json -Compress)"
-          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
-          New-Item -ItemType Directory -Force ci | Out-Null
-          $bmp.Save("ci\window.png")
+          $rows += "| Engine with a window open | $(MB $engine.WorkingSet64) MB | $(MB $engine.PrivateMemorySize64) MB |"
+
           Call quit | Out-Null
           Start-Sleep -Seconds 5
-          $left = @(Get-Process -Name DualLink -ErrorAction SilentlyContinue).Count
+          $left = @(Get-Process -Name DualLink, DualLinkWindow -ErrorAction SilentlyContinue).Count
           $rows += ""
           $rows += "DualLink processes left after Quit: $left"
           $rows | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY

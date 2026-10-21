@@ -11,6 +11,10 @@ python -m PyInstaller --noconfirm --onedir --windowed --name DualLink --icon bui
   --distpath dist\folder --workpath build\folder --add-data "duallink\ui;duallink\ui" --add-data "duallink\assets;duallink\assets" ^
   --hidden-import pystray._win32 --hidden-import webview.platforms.winforms --hidden-import webview.platforms.edgechromium ^
   main.py || exit /b 1
+where dotnet >nul 2>nul && (
+  dotnet publish native\DualLinkWindow\DualLinkWindow.csproj -c Release -r win-x64 -p:Platform=x64 -o dist\native || exit /b 1
+  xcopy /e /i /y dist\native dist\folder\DualLink\DualLinkWindow >nul
+)
 where iscc >nul 2>nul && iscc installer\DualLink.iss
 echo.
 echo Done: dist\DualLink.exe (and dist\DualLink-Setup-*.exe if Inno Setup is installed)

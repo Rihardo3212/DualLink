@@ -34,6 +34,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; versions up to 1.8 installed a single self-extracting DualLink.exe; newer ones install a folder.
 ; Remove the previous version's support files first so nothing outdated is left behind.
 Type: filesandordirs; Name: "{app}\_internal"
+Type: filesandordirs; Name: "{app}\DualLinkWindow"
 
 [Files]
 Source: "..\dist\folder\DualLink\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -54,6 +55,7 @@ Filename: "{app}\DualLink.exe"; Parameters: "--updated"; Flags: nowait; Check: I
 [UninstallRun]
 ; stop DualLink, then give qBittorrent its own settings back if DualLink was on
 Filename: "{sys}\taskkill.exe"; Parameters: "/f /im DualLink.exe"; Flags: runhidden; RunOnceId: "StopDualLink"
+Filename: "{sys}\taskkill.exe"; Parameters: "/f /im DualLinkWindow.exe"; Flags: runhidden; RunOnceId: "StopDualLinkWindow"
 Filename: "{app}\DualLink.exe"; Parameters: "--cleanup"; Flags: runhidden waituntilterminated; RunOnceId: "CleanupDualLink"
 
 [Code]

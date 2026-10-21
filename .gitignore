@@ -7,3 +7,8 @@ dist/
 venv/
 .pytest_cache/
 duallink/_build_info.py
+# native window (Visual Studio / dotnet build output)
+native/**/bin/
+native/**/obj/
+.vs/
+shots/

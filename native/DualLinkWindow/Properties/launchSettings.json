@@ -1,0 +1,19 @@
+{
+  "profiles": {
+    "Demo screenshots": {
+      "commandName": "Project",
+      "commandLineArgs": "--demo --screenshots shots/demo"
+    },
+    "Screenshots of the running DualLink": {
+      "commandName": "Project",
+      "commandLineArgs": "--screenshots shots/live"
+    },
+    "DualLinkWindow": {
+      "commandName": "Project"
+    },
+    "Demo": {
+      "commandName": "Project",
+      "commandLineArgs": "--demo"
+    }
+  }
+}

@@ -41,6 +41,9 @@ A single torrent or a single file therefore uses both internet connections.
   The window is a separate process that exists only while it's open; closing it gives its memory back.
   At ~14 MiB/s over 80 connections the proxy uses about 10 % of one CPU core and can relay over 1 GiB/s, and
   network information comes straight from Windows (no helper programs started in the background).
+- **New window (preview).** A native Windows window, built like Windows 11's own apps (WinUI 3), with the same
+  screens as the classic one. Turn it on in **Settings › App › Use the new window**; you can switch back any time,
+  and if it ever fails to start DualLink opens the classic window instead.
 - Runs in the system tray, shows live speed graphs, and can start with Windows.
 
 ## Apps
@@ -99,7 +102,8 @@ same way as FDM - add them with **+ More apps**, which shows the steps for each.
 
 ## Build from source
 
-Requires Windows 10/11 and Python 3.10+.
+Requires Windows 10/11 and Python 3.10+. The native window also needs the .NET 10 SDK (Visual Studio 2026 has it);
+publishing it ahead of time additionally needs Visual Studio's *Desktop development with C++* workload.
 
 ```bat
 git clone https://github.com/<you>/DualLink.git
@@ -124,10 +128,11 @@ DualLink runs as two processes from the same `DualLink.exe`:
 
 - **The engine** (`DualLink.exe`, or `--minimized` when it starts with Windows) does all the work: the proxy,
   balancing, qBittorrent set-up, notifications and the tray icon. It never loads the window's libraries.
-- **The window** (`DualLink.exe --window`) is started by the engine when you open DualLink and ends when you
-  close it. It shows the interface and asks the engine for everything over a small local API
-  (`127.0.0.1` only, with a random port and a secret token written to `%APPDATA%\DualLink\engine.json`;
-  requests from web pages are refused).
+- **The window** is started by the engine when you open DualLink and ends when you close it. It shows the
+  interface and asks the engine for everything over a small local API (`127.0.0.1` only, with a random port and
+  a secret token written to `%APPDATA%\DualLink\engine.json`; requests from web pages are refused).
+  There are two: the classic web window (`DualLink.exe --window`) and the new native one
+  (`DualLinkWindow\DualLinkWindow.exe`, C# / WinUI 3, compiled ahead of time; installed version only).
 
 ```
 main.py                    entry point (engine, --window, --cleanup)
@@ -143,14 +148,18 @@ duallink/updates.py        update check against GitHub Releases
 duallink/diag.py           traffic check and live app status
 duallink/winapi.py         adapters, TCP connections and program names straight from Windows
 duallink/instance.py       one engine and one window at a time
-duallink/ui/index.html     the interface
+duallink/ui/index.html     the classic (web) interface
 duallink/assets/           tray icons (made by tools/make_icon.py)
+native/DualLinkWindow/     the new native window (C#, WinUI 3) - open native/DualLinkWindow.sln in Visual Studio
 installer/DualLink.iss     Windows installer script
 tests/                     pytest suite (runs on Windows in CI)
 ```
 
-Every build on GitHub also starts the built app, measures the engine's and the window's memory, takes a
-screenshot of the window and writes the numbers to the run's summary page.
+Every build on GitHub also starts the built app, measures the memory of the engine and of both windows, takes
+screenshots and writes the numbers to the run's summary page. The native window can photograph all of its own
+screens: `DualLinkWindow.exe --demo --screenshots shots` (made-up data) or `--screenshots shots` (your running
+DualLink, read-only) - in Visual Studio these are the "Demo screenshots" and "Screenshots of the running DualLink"
+start options.
 
 Settings are stored in `%APPDATA%\DualLink\config.json`. That includes the qBittorrent Web UI password,
 if you enter one, in plain text. Nothing leaves your PC: the proxy only listens on 127.0.0.1.

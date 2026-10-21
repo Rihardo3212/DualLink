@@ -279,6 +279,8 @@
       <h4>App</h4>
       <label class="toggle"><span>Keep running in the tray when closed</span><span class="switch"><input type="checkbox" id="s_tray"><span></span></span></label>
       <label class="toggle"><span>Start with Windows</span><span class="switch"><input type="checkbox" id="s_autostart"><span></span></span></label>
+      <label class="toggle hidden" id="nativeRow"><span>Use the new window (preview)<small>Built natively for Windows - lighter and quicker. DualLink switches over straight away.</small></span>
+        <span class="switch"><input type="checkbox" id="s_native"><span></span></span></label>
       <div class="field"><label for="s_port">Proxy port</label><input type="number" id="s_port" min="1024" max="65535"></div>
     </div>
     <div class="section">
@@ -494,6 +496,7 @@ function render(s) {
   $("updateBtn").classList.toggle("hidden", !s.update);
   if (s.update) $("updateBtn").textContent = `Update to ${s.update.version}`;
   $("verText").textContent = `DualLink ${s.version}`;
+  $("nativeRow").classList.toggle("hidden", !s.native_available);
 }
 async function poll() {
   let wait = 1000;
@@ -553,6 +556,7 @@ function fillSettings() {
   $("s_tray").checked = s.tray; $("s_autostart").checked = s.autostart;
   $("s_auto_on_hotspot").checked = s.auto_on_hotspot; $("s_auto_on_start").checked = s.auto_on_start;
   $("s_check_updates").checked = s.check_updates;
+  $("s_native").checked = !!s.native_window;
   $("manualShares").classList.toggle("hidden", s.auto);
   $("recycleRow").classList.toggle("hidden", !s.auto);
 }
@@ -582,6 +586,7 @@ function bindSettings() {
   num("s_share_eth", "share_eth", (v) => parseFloat(v) || 1); num("s_share_hot", "share_hot", (v) => parseFloat(v) || 1);
   num("s_quota", "quota_mb", (v) => parseFloat(v) || 0);
   $("s_port").addEventListener("change", () => save({ port: parseInt($("s_port").value) || 1080 }));   // on finish, not per keystroke
+  $("s_native").addEventListener("change", () => saveNow({ native_window: $("s_native").checked }));   // DualLink switches windows
 }
 const openSettings = (open) => { $("drawer").classList.toggle("open", open); $("scrim").classList.toggle("open", open); };
 
