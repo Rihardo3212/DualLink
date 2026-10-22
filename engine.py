@@ -18,7 +18,15 @@ import time
 def list_adapters():
     """Return [(adapter_name, ipv4)] for usable IPv4 addresses."""
     found = []
+    api_ok = False
     if os.name == "nt":
+        try:                                    # ask Windows directly (no ipconfig process)
+            from . import winapi
+            found = [(a["name"], ip) for a in winapi.adapters() for ip in a["v4"]]
+            api_ok = True
+        except Exception:
+            found = []
+    if os.name == "nt" and not api_ok:
         try:
             txt = subprocess.run(["ipconfig"], capture_output=True, errors="ignore", text=True,
                                  timeout=10, creationflags=0x08000000).stdout  # CREATE_NO_WINDOW
@@ -59,10 +67,12 @@ class Link:
     def __init__(self, name):
         self.name = name
         self.ip = ""
+        self.ip6 = ""             # the adapter's global IPv6 address, if it has one
         self.weight = 1.0
         self.quota_bytes = 0          # 0 = unlimited (applies to down+up)
         self.active = 0
-        self.pending = 0          # connections being opened right now (counted so bursts spread out)
+        self.pending = 0          # connections being opened right now
+        self.pending_at = {}      # attempt -> when it started (only fresh ones count as load, see order())
         self.udp_bytes = 0        # DHT / UDP-tracker traffic (kept out of the speed measurements)
         self.down = 0
         self.up = 0
@@ -108,11 +118,12 @@ class _UdpAssociation:
         self.closed = False
 
     async def _outbound(self, link):
-        t = self.out.get(id(link))
+        key = (id(link), link.ip)           # a new IP (reconnected phone) needs a new socket
+        t = self.out.get(key)
         if t is None:
             t, _ = await self.loop.create_datagram_endpoint(
-                lambda: _RemoteSide(self, link), local_addr=(link.ip, 0))
-            self.out[id(link)] = t
+                lambda: _RemoteSide(self, link), local_addr=(link.ip or "0.0.0.0", 0))
+            self.out[key] = t
         return t
 
     def from_client(self, data, addr):
@@ -193,6 +204,58 @@ class _RemoteSide(asyncio.DatagramProtocol):
         pass   # ICMP "port unreachable" from a dead DHT node: normal, ignore
 
 
+class _PendingConn:
+    """Stands in for Conn during the few microseconds before the connection is registered."""
+    __slots__ = ("link",)
+
+    def __init__(self, link):
+        self.link = link
+
+    def add(self, n):
+        pass
+
+
+class _Pipe(asyncio.Protocol):
+    """One direction of a relayed connection: whatever arrives is written straight to the other side."""
+    __slots__ = ("link", "conn", "down", "done", "peer", "transport")
+
+    def __init__(self, link, conn, down, done):
+        self.link, self.conn, self.down, self.done = link, conn, down, done
+        self.peer = self.transport = None
+
+    def connection_made(self, transport):
+        self.transport = transport
+
+    def data_received(self, data):
+        n = len(data)
+        if self.down:
+            self.link.down += n
+        else:
+            self.link.up += n
+        self.conn.add(n)
+        self.peer.transport.write(data)
+        if self.link.quota_bytes and self.link.over_quota():
+            self.transport.close()
+            self.peer.transport.close()
+
+    def eof_received(self):
+        return False                      # close this side; connection_lost then closes the other
+
+    def pause_writing(self):              # our outgoing buffer is full: stop reading from the other side
+        if self.peer.transport is not None:
+            self.peer.transport.pause_reading()
+
+    def resume_writing(self):
+        if self.peer.transport is not None:
+            self.peer.transport.resume_reading()
+
+    def connection_lost(self, exc):
+        if self.peer is not None and self.peer.transport is not None:
+            self.peer.transport.close()
+        if not self.done.done():
+            self.done.set_result(None)
+
+
 class BalancingProxy:
     """SOCKS5 (CONNECT only) proxy; each outgoing connection is bound to one link's local IP."""
 
@@ -210,12 +273,31 @@ class BalancingProxy:
         self.conns = set()
         self.moved = 0
         self.udp_assocs = 0       # open UDP associations (qBittorrent's DHT / UDP trackers)
+        # Pass-through: DualLink is "off" but apps like Free Download Manager stay pointed at the proxy,
+        # so connections go out normally (Windows picks the route) instead of failing.
+        self.passthrough = False
+        self.direct = Link("Direct")
+        self.refused_ipv6 = 0     # CONNECT requests to IPv6 addresses (not supported yet)
+        self.failed = 0           # connections that couldn't be made on any link
         self.udp_packets = 0
 
     # -- link choice -------------------------------------------------------- #
+    # Attempts being opened count as load, so a burst of new connections spreads over the links. But only
+    # fresh ones: an attempt still unanswered after this long is almost always to a peer that isn't there
+    # (torrents try many), and if those piled up on a link with slower failures (a phone's mobile network)
+    # they would push the working connections onto the other link.
+    FRESH_PENDING = 1.5
+
     def order(self):
+        if self.passthrough:
+            return [self.direct]
         usable = [l for l in self.links if l.usable()]
-        return sorted(usable, key=lambda l: (l.active + l.pending + 1) / max(l.weight, 0.01))
+        now = time.monotonic()
+
+        def load(l):
+            fresh = sum(1 for t in list(l.pending_at.values()) if now - t < self.FRESH_PENDING)
+            return (l.active + fresh + 1) / max(l.weight, 0.01)
+        return sorted(usable, key=load)
 
     # -- lifecycle ---------------------------------------------------------- #
     def start(self, port: int):
@@ -305,7 +387,7 @@ class BalancingProxy:
                 self._update_weights()
                 now = time.monotonic()
                 best = self.preferred()
-                if not (self.auto and self.recycle and best) or now - last_move < self.MOVE_EVERY:
+                if self.passthrough or not (self.auto and self.recycle and best) or now - last_move < self.MOVE_EVERY:
                     continue
                 idle = [c for c in self.conns
                         if c.link is not best and now - c.started > self.MIN_AGE
@@ -327,6 +409,12 @@ class BalancingProxy:
         await asyncio.gather(*tasks, return_exceptions=True)
         asyncio.get_running_loop().stop()
 
+    def close_link(self, link):
+        """Close every connection on a link (adapter gone or new IP); qBittorrent reconnects them."""
+        loop = self.loop
+        if loop and loop.is_running():
+            loop.call_soon_threadsafe(lambda: [c.task.cancel() for c in list(self.conns) if c.link is link])
+
     def stop(self):
         loop, thread = self.loop, self.thread
         if loop and loop.is_running():
@@ -340,7 +428,7 @@ class BalancingProxy:
 
     # -- SOCKS5 -------------------------------------------------------------- #
     async def _handle(self, reader, writer):
-        remote_w = None
+        remote_t = None
         link = None
         conn = None
         try:
@@ -353,26 +441,42 @@ class BalancingProxy:
             if cmd not in (1, 3):
                 writer.write(b"\x05\x07\x00\x01\x00\x00\x00\x00\x00\x00")
                 return
+            v6 = False
             if atyp == 1:
                 host = socket.inet_ntoa(await reader.readexactly(4))
             elif atyp == 3:
                 ln = (await reader.readexactly(1))[0]
                 host = (await reader.readexactly(ln)).decode("ascii", "ignore")
-            elif atyp == 4 and cmd == 3:
-                await reader.readexactly(16)   # client's own address hint: not needed
-                host = ""
+            elif atyp == 4:
+                raw = await reader.readexactly(16)
+                host = "" if cmd == 3 else socket.inet_ntop(socket.AF_INET6, raw)   # UDP: just a hint
+                v6 = cmd == 1
             else:
-                writer.write(b"\x05\x08\x00\x01\x00\x00\x00\x00\x00\x00")  # IPv6 not supported
+                writer.write(b"\x05\x08\x00\x01\x00\x00\x00\x00\x00\x00")
                 return
             port = struct.unpack(">H", await reader.readexactly(2))[0]
             if cmd == 3:
                 await self._udp_associate(reader, writer)
                 return
 
+            can_v6 = self.passthrough or any(l.usable() and l.ip6 for l in self.links)
+            if v6 and not can_v6:
+                self.refused_ipv6 += 1
+                writer.write(b"\x05\x08\x00\x01\x00\x00\x00\x00\x00\x00")  # no link has IPv6 right now
+                return
             loop = asyncio.get_running_loop()
             try:
-                infos = await loop.getaddrinfo(host, port, family=socket.AF_INET, type=socket.SOCK_STREAM)
-                dest = infos[0][4]
+                if v6:
+                    dest = (host, port, 0, 0)
+                else:
+                    try:     # IPv4 first; fall back to IPv6 for names that only have an IPv6 address
+                        infos = await loop.getaddrinfo(host, port, family=socket.AF_INET, type=socket.SOCK_STREAM)
+                    except Exception:
+                        if atyp != 3 or not can_v6:
+                            raise
+                        infos = await loop.getaddrinfo(host, port, family=socket.AF_INET6, type=socket.SOCK_STREAM)
+                        v6 = True
+                    dest = infos[0][4]
             except Exception:
                 writer.write(b"\x05\x04\x00\x01\x00\x00\x00\x00\x00\x00")
                 return
@@ -381,16 +485,21 @@ class BalancingProxy:
             tried = set()
             while sock is None:
                 # pick again after every failure: the best link may have changed meanwhile
-                choices = [l for l in self.order() if id(l) not in tried]
+                choices = [l for l in self.order() if id(l) not in tried and (not v6 or l.ip6 or not l.ip)]
                 if not choices:
                     break
                 cand = choices[0]
                 tried.add(id(cand))
                 cand.pending += 1
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                attempt = object()
+                cand.pending_at[attempt] = time.monotonic()
+                s = socket.socket(socket.AF_INET6 if v6 else socket.AF_INET, socket.SOCK_STREAM)
                 s.setblocking(False)
                 try:
-                    s.bind((cand.ip, 0))
+                    if v6 and cand.ip6:      # the "Direct" pass-through link isn't bound
+                        s.bind((cand.ip6, 0, 0, 0))
+                    elif not v6 and cand.ip:
+                        s.bind((cand.ip, 0))
                     await asyncio.wait_for(loop.sock_connect(s, dest), 10)
                     sock, link = s, cand
                 except Exception:
@@ -398,35 +507,55 @@ class BalancingProxy:
                     s.close()
                 finally:
                     cand.pending -= 1
+                    cand.pending_at.pop(attempt, None)
             if sock is None:
+                self.failed += 1
                 writer.write(b"\x05\x05\x00\x01\x00\x00\x00\x00\x00\x00")
                 return
 
-            remote_r, remote_w = await asyncio.open_connection(sock=sock)
+            # Data phase: hand both sockets to _Pipe callbacks, which pass data straight through
+            # (much less CPU than awaiting every chunk; flow control via pause/resume_reading).
+            done = loop.create_future()
+            pending = _PendingConn(link)
+            up = _Pipe(link, pending, False, done)          # app -> internet
+            down = _Pipe(link, pending, True, done)         # internet -> app
+            up.peer, down.peer = down, up
+            remote_t, _ = await loop.create_connection(lambda: down, sock=sock)
             writer.write(b"\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00")
+            client_t = writer.transport
+            leftover = bytes(reader._buffer)                # anything the app sent right after its request
+            reader._buffer.clear()
+            client_t.set_protocol(up)
+            up.connection_made(client_t)
+            if not client_t.is_reading():                   # the stream reader may have paused it
+                client_t.resume_reading()
+            for t in (client_t, remote_t):
+                t.set_write_buffer_limits(high=256 * 1024)
             conn = Conn(link, asyncio.current_task())
+            up.conn = down.conn = conn
             self.conns.add(conn)
             link.active += 1
-            await asyncio.gather(
-                self._pump(reader, remote_w, link, "up", conn),
-                self._pump(remote_r, writer, link, "down", conn),
-            )
+            if leftover:
+                up.data_received(leftover)
+            await done
         except (asyncio.IncompleteReadError, ConnectionError, OSError):
             pass
         finally:
             if conn is not None:
                 link.active -= 1
                 self.conns.discard(conn)
-            for w in (writer, remote_w):
-                if w is not None:
+            for t in (writer, remote_t):
+                if t is not None:
                     try:
-                        w.close()
+                        t.close()
                     except Exception:
                         pass
 
     # -- SOCKS5 UDP ASSOCIATE (DHT, UDP trackers) ------------------------------ #
     def udp_link(self):
         """UDP is many tiny packets: keep it on the first link (Ethernet) to save mobile data."""
+        if self.passthrough:
+            return self.direct
         return next((l for l in self.links if l.usable()), None)
 
     async def _udp_associate(self, reader, writer):
@@ -445,27 +574,5 @@ class BalancingProxy:
             self.udp_assocs -= 1
             assoc.close()
 
-    async def _pump(self, r, w, link, direction, conn):
-        try:
-            while True:
-                data = await r.read(65536)
-                if not data:
-                    break
-                conn.add(len(data))
-                if direction == "down":
-                    link.down += len(data)
-                else:
-                    link.up += len(data)
-                w.write(data)
-                await w.drain()
-                if link.over_quota():
-                    break
-        except (ConnectionError, OSError):
-            pass
-        finally:
-            try:
-                w.close()
-            except Exception:
-                pass
 
 
