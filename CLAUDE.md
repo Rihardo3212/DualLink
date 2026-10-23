@@ -5,7 +5,7 @@ SOCKS5 proxy that spreads each app's connections over both links. Apps: qBittorr
 its Web UI), FDM, JDownloader, IDM, Firefox, any SOCKS5 app. Repo: https://github.com/Rihardo3212/DualLink
 
 ## Rules from the owner (Rihards)
-- Commits are authored as `Rihards <r1hardo@proton.me>`. Never add a `Claude-Session` line or session link.
+- Commits are authored as `Rihards` with the email the recent commits in `git log` use (not the old Gmail). Never add a `Claude-Session` line or session link.
   A `Co-Authored-By: Claude ...` line is fine.
 - Keep token use low; don't do long live tests unless asked. Rihards tests on his PC himself.
 - Plain, short explanations; the README is user-facing.
@@ -40,13 +40,12 @@ Two processes:
 - 1.13.1 was a broken release: its tag points to a commit that put the files in the repo root, so it was really
   1.13.0 (users saw "You're now on version 1.13.0" and kept being offered the update). CI now fails a tag that
   doesn't match `__version__`.
-- **1.13.2 pending**: the real 1.13.1 change - in `engine.py` only connection attempts younger than 1.5 s
+- Released 1.13.2: the real 1.13.1 change - in `engine.py` only connection attempts younger than 1.5 s
   (`FRESH_PENDING`) count as a link's load, so unanswered torrent peer attempts piling up on the hotspot don't push
-  working connections onto Ethernet. Release it by tagging v1.13.2.
+  working connections onto Ethernet.
 - Open question: Rihards saw 103 Ethernet vs 7 hotspot connections in qBittorrent although the hotspot tested
   faster (98 vs 72 Mbps). If 1.13.1 doesn't fix it, next step is to count failed connection attempts per link
   (`Link.failures` exists but isn't reported) and show it, e.g. in the Traffic check. Other possible causes:
   failed hotspot attempts fall back to Ethernet; IPv6 peers can only use a link with IPv6.
 - Untested: the tray icon's right-click menu.
-- Leftover files from very old versions sit in the repo root (`__init__.py`, `controller.py`, `engine.py`, `ui/`);
-  they're unused - ask before deleting.
+- Old leftover files in the repo root and Visual Studio `*.user` files were removed (Oct 2026); keep the root tidy.

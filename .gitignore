@@ -11,6 +11,7 @@ duallink/_build_info.py
 native/**/bin/
 native/**/obj/
 .vs/
+*.user
 shots/
 
 # files the Claude app saves into this folder
