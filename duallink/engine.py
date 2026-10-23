@@ -71,7 +71,8 @@ class Link:
         self.weight = 1.0
         self.quota_bytes = 0          # 0 = unlimited (applies to down+up)
         self.active = 0
-        self.pending = 0          # connections being opened right now (counted so bursts spread out)
+        self.pending = 0          # connections being opened right now
+        self.pending_at = {}      # attempt -> when it started (only fresh ones count as load, see order())
         self.udp_bytes = 0        # DHT / UDP-tracker traffic (kept out of the speed measurements)
         self.down = 0
         self.up = 0
@@ -281,11 +282,22 @@ class BalancingProxy:
         self.udp_packets = 0
 
     # -- link choice -------------------------------------------------------- #
+    # Attempts being opened count as load, so a burst of new connections spreads over the links. But only
+    # fresh ones: an attempt still unanswered after this long is almost always to a peer that isn't there
+    # (torrents try many), and if those piled up on a link with slower failures (a phone's mobile network)
+    # they would push the working connections onto the other link.
+    FRESH_PENDING = 1.5
+
     def order(self):
         if self.passthrough:
             return [self.direct]
         usable = [l for l in self.links if l.usable()]
-        return sorted(usable, key=lambda l: (l.active + l.pending + 1) / max(l.weight, 0.01))
+        now = time.monotonic()
+
+        def load(l):
+            fresh = sum(1 for t in list(l.pending_at.values()) if now - t < self.FRESH_PENDING)
+            return (l.active + fresh + 1) / max(l.weight, 0.01)
+        return sorted(usable, key=load)
 
     # -- lifecycle ---------------------------------------------------------- #
     def start(self, port: int):
@@ -479,6 +491,8 @@ class BalancingProxy:
                 cand = choices[0]
                 tried.add(id(cand))
                 cand.pending += 1
+                attempt = object()
+                cand.pending_at[attempt] = time.monotonic()
                 s = socket.socket(socket.AF_INET6 if v6 else socket.AF_INET, socket.SOCK_STREAM)
                 s.setblocking(False)
                 try:
@@ -493,6 +507,7 @@ class BalancingProxy:
                     s.close()
                 finally:
                     cand.pending -= 1
+                    cand.pending_at.pop(attempt, None)
             if sock is None:
                 self.failed += 1
                 writer.write(b"\x05\x05\x00\x01\x00\x00\x00\x00\x00\x00")

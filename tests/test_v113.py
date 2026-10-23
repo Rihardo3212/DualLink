@@ -4,6 +4,7 @@ import time
 
 from duallink.api import Api
 from duallink.controller import Controller
+from duallink.engine import BalancingProxy, Link
 from helpers import FakeQbt
 from test_adapters import Adapters, wait_for
 
@@ -117,3 +118,18 @@ def test_other_settings_dont_touch_qbittorrent(tmp_path):
         ctl.power_off()
         ctl.shutdown()
         q.close()
+
+
+def test_unanswered_connection_attempts_dont_push_peers_off_a_link():
+    """Torrents try many peers that never answer; on the hotspot those attempts can take longer to fail.
+    They mustn't count as load, or working connections all end up on Ethernet."""
+    eth, hot = Link("Ethernet"), Link("Hotspot")
+    eth.ip, hot.ip = "127.0.0.1", "127.0.0.2"
+    proxy = BalancingProxy([eth, hot])
+    eth.active, hot.active = 100, 7
+    now = time.monotonic()
+    hot.pending_at = {object(): now - 8 for _ in range(150)}   # waiting for peers that aren't there
+    assert proxy.order()[0] is hot
+    eth.active = hot.active = 7
+    hot.pending_at = {object(): now for _ in range(10)}        # a burst being opened right now
+    assert proxy.order()[0] is eth                              # still spreads out
