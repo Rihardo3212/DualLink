@@ -20,6 +20,16 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Check the tag matches the app version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $version = python -c "import duallink; print(duallink.__version__)"
+          if ("v$version" -ne "${{ github.ref_name }}") {
+            Write-Error "Tag ${{ github.ref_name }} but duallink/__init__.py says $version"
+            exit 1
+          }
+
       - name: Install dependencies
         run: python -m pip install -r requirements-dev.txt
 

@@ -37,9 +37,12 @@ Two processes:
 ## Current state (Oct 2026)
 - Released: 1.13.0 (new install starts with no apps; apps can be removed with the ✕ button; switch = pause;
   DualLink turns back on after an in-app update if it was on).
-- **1.13.1 pending**: `engine.py` change - only connection attempts younger than 1.5 s (`FRESH_PENDING`) count as a
-  link's load, so unanswered torrent peer attempts piling up on the hotspot don't push working connections onto
-  Ethernet. Check that the files are in place, then release.
+- 1.13.1 was a broken release: its tag points to a commit that put the files in the repo root, so it was really
+  1.13.0 (users saw "You're now on version 1.13.0" and kept being offered the update). CI now fails a tag that
+  doesn't match `__version__`.
+- **1.13.2 pending**: the real 1.13.1 change - in `engine.py` only connection attempts younger than 1.5 s
+  (`FRESH_PENDING`) count as a link's load, so unanswered torrent peer attempts piling up on the hotspot don't push
+  working connections onto Ethernet. Release it by tagging v1.13.2.
 - Open question: Rihards saw 103 Ethernet vs 7 hotspot connections in qBittorrent although the hotspot tested
   faster (98 vs 72 Mbps). If 1.13.1 doesn't fix it, next step is to count failed connection attempts per link
   (`Link.failures` exists but isn't reported) and show it, e.g. in the Traffic check. Other possible causes:
