@@ -5,7 +5,7 @@ SOCKS5 proxy that spreads each app's connections over both links. Apps: qBittorr
 its Web UI), FDM, JDownloader, IDM, Firefox, any SOCKS5 app. Repo: https://github.com/Rihardo3212/DualLink
 
 ## Rules from the owner (Rihards)
-- Commits are authored as `Rihards` with the email the recent commits in `git log` use (not the old Gmail). Never add a `Claude-Session` line or session link.
+- Commits are authored as `Rihards <92665337+Rihardo3212@users.noreply.github.com>` (GitHub's private address; never a real email). Never add a `Claude-Session` line or session link.
   A `Co-Authored-By: Claude ...` line is fine.
 - Keep token use low; don't do long live tests unless asked. Rihards tests on his PC himself.
 - Plain, short explanations; the README is user-facing.
