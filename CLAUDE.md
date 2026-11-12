@@ -41,10 +41,9 @@ All Rust (rewritten from Python + C#/WinUI 3 in 2.0.0, Nov 2026). A Cargo worksp
 
 ## Current state (Nov 2026)
 - Released: 1.13.2 (the last Python/C# version).
-- 2.0.0 (Rust rewrite) is written but NOT yet run on real Windows: it compiles for Windows, tests pass on Linux,
-  and the window was checked from Linux screenshots. Rihards needs to test it on his PC before tagging:
-  tray icon and its right-click menu, notifications, adapter detection, qBittorrent setup, speed test,
-  traffic check, Start with Windows, updating from 1.13.2 with the in-app updater, uninstall.
+- 2.0.0 (Rust rewrite): CI builds and tests it on Windows, and Rihards tested the installer from PR #1 on his
+  PC (12 Nov 2026): tray icon and menu, notifications, adapter detection, qBittorrent setup, speed test,
+  traffic check, Start with Windows, in-app update from 1.13.2, uninstall - all good. Not tagged/released yet.
 - The control API is the same shape as 1.x except `copy`/`open_url` are gone (the window does them itself)
   and settings no longer have `eth_ip`/`hot_ip`. `config.json` from 1.x is read as it is.
 - Open question (from 1.13): Rihards saw 103 Ethernet vs 7 hotspot connections in qBittorrent although the
