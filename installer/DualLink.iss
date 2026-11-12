@@ -1,5 +1,5 @@
 ; Inno Setup script for DualLink. Built by GitHub Actions (see .github/workflows/build.yml):
-;   ISCC.exe /DAppVersion=1.6.0 installer\DualLink.iss
+;   ISCC.exe /DAppVersion=2.0.0 installer\DualLink.iss
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
@@ -17,7 +17,7 @@ DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=..\dist
 OutputBaseFilename=DualLink-Setup-{#AppVersion}
-SetupIconFile=..\build\icon.ico
+SetupIconFile=..\assets\icon.ico
 UninstallDisplayIcon={app}\DualLink.exe
 UninstallDisplayName=DualLink
 Compression=lzma2
@@ -31,13 +31,13 @@ RestartApplications=no
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [InstallDelete]
-; versions up to 1.8 installed a single self-extracting DualLink.exe; newer ones install a folder.
-; Remove the previous version's support files first so nothing outdated is left behind.
+; versions before 2.0 (Python engine, .NET window) installed these support folders: remove them
 Type: filesandordirs; Name: "{app}\_internal"
 Type: filesandordirs; Name: "{app}\DualLinkWindow"
 
 [Files]
-Source: "..\dist\folder\DualLink\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; DualLink.exe (the engine) and DualLinkWindow.exe (the window)
+Source: "..\dist\DualLink\*"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\DualLink"; Filename: "{app}\DualLink.exe"
@@ -59,24 +59,6 @@ Filename: "{sys}\taskkill.exe"; Parameters: "/f /im DualLinkWindow.exe"; Flags: 
 Filename: "{app}\DualLink.exe"; Parameters: "--cleanup"; Flags: runhidden waituntilterminated; RunOnceId: "CleanupDualLink"
 
 [Code]
-function SetEnvironmentVariable(lpName: String; lpValue: String): Boolean;
-  external 'SetEnvironmentVariableW@kernel32.dll stdcall';
-
-// DualLink.exe is a one-file PyInstaller app. When an older DualLink starts this installer during an in-app
-// update, its hidden PyInstaller variables are passed on to the new DualLink we start at the end, which then
-// looks for the old (deleted) temporary folder: "Failed to load Python DLL". This tells it to start fresh.
-function InitializeSetup(): Boolean;
-begin
-  SetEnvironmentVariable('PYINSTALLER_RESET_ENVIRONMENT', '1');
-  Result := True;
-end;
-
-function InitializeUninstall(): Boolean;
-begin
-  SetEnvironmentVariable('PYINSTALLER_RESET_ENVIRONMENT', '1');
-  Result := True;
-end;
-
 function IsInAppUpdate: Boolean;
 begin
   Result := ExpandConstant('{param:update|0}') = '1';

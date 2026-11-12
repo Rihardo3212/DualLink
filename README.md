@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/icon.png" width="96" alt="DualLink icon"></p>
+<p align="center"><img src="assets/logo.png" width="96" alt="DualLink icon"></p>
 
 <h1 align="center">DualLink</h1>
 <p align="center">Download over your <b>Ethernet</b> and your <b>phone hotspot</b> at the same time - in qBittorrent, Free Download Manager, JDownloader, IDM, Firefox and other apps.</p>
@@ -62,7 +62,7 @@ same way as FDM - add them with **+ Add an app**, which shows the steps for each
 
 1. Download **`DualLink-Setup-x.y.z.exe`** from the [Releases](../../releases) page and run it. It installs for your user
    only (no administrator prompt) with a Start menu entry, an optional desktop shortcut and an uninstaller.
-   (Up to 1.11 there was also a standalone `DualLink.exe`; from 1.12 the installer is the only download.)
+   Updating from 1.x works from inside DualLink; your settings are kept.
 2. **If you use qBittorrent:** add it in DualLink with **+ Add an app**, then (once) in qBittorrent open **Tools › Options › Web UI**, tick
    **Web User Interface (Remote control)** (port 8080), tick
    **Bypass authentication for clients on localhost**, and click OK.
@@ -102,68 +102,66 @@ same way as FDM - add them with **+ Add an app**, which shows the steps for each
 
 ## Build from source
 
-Requires Windows 10/11, Python 3.10+ and the .NET 10 SDK for the window (Visual Studio 2026 has it). Compiling
-the window ahead of time, like the released version, additionally needs Visual Studio's *Desktop development
-with C++* workload; without it you get a normal build that works the same.
+Requires Windows 10/11 and [Rust](https://rustup.rs) (which asks for Visual Studio's *Desktop development with
+C++* build tools). Inno Setup is only needed for the installer.
 
 ```bat
 git clone https://github.com/<you>/DualLink.git
 cd DualLink
-python -m pip install -r requirements.txt
 build.bat                 :: run the tests, build DualLink and its window (and the installer, with Inno Setup)
-python main.py            :: or run the engine from source - it opens the newest window build it finds
+cargo run -p duallink-engine      :: or run the engine straight away - it opens the window built next to it
 ```
-
-Open `native\DualLinkWindow.sln` in Visual Studio to work on the window; it talks to whichever DualLink is running.
 
 Every push to GitHub runs the tests on Windows and builds the installer `DualLink-Setup-x.y.z.exe`
 (made with [Inno Setup](https://jrsoftware.org/isinfo.php) from `installer/DualLink.iss`). You can find them under
-**Actions › latest run › Artifacts**. To publish a release, push a tag:
+**Actions › latest run › Artifacts**. To publish a release, set the version in `Cargo.toml` and push a tag:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v2.0.0
+git push origin v2.0.0
 ```
 
 ## How it's put together
 
-DualLink runs as two processes:
+DualLink is written in Rust and runs as two programs:
 
-- **The engine** (`DualLink.exe`, Python; `--minimized` when it starts with Windows) does all the work: the
+- **The engine** (`DualLink.exe`; `--minimized` when it starts with Windows) does all the work: the
   proxy, balancing, qBittorrent set-up, notifications and the tray icon.
-- **The window** (`DualLinkWindow\DualLinkWindow.exe`, C# / WinUI 3) is started by the engine when you open
-  DualLink and ends when you close it. It asks the engine for everything over a small local API (`127.0.0.1`
-  only, with a random port and a secret token written to `%APPDATA%\DualLink\engine.json`; requests from web
-  pages are refused).
+- **The window** (`DualLinkWindow.exe`, made with [Slint](https://slint.dev)) is started by the engine when you
+  open DualLink and ends when you close it. It asks the engine for everything over a small local API
+  (`127.0.0.1` only, with a random port and a secret token written to `%APPDATA%\DualLink\engine.json`;
+  requests from web pages are refused).
 
 ```
-main.py                    entry point (engine, --cleanup)
-duallink/service.py        the engine: wires everything together, opens/closes the window
-duallink/api.py            the local control API the window talks to
-duallink/tray.py           tray icon straight from the Windows API (pystray as fallback)
-duallink/engine.py         SOCKS5 proxy + automatic balancing (no dependencies)
-duallink/controller.py     settings, on/off, statistics, start-with-Windows
-duallink/qbt.py            qBittorrent Web UI setup/restore
-duallink/speedtest.py      per-link speed test
-duallink/updates.py        update check against GitHub Releases
-duallink/diag.py           traffic check and live app status
-duallink/winapi.py         adapters, TCP connections and program names straight from Windows
-duallink/instance.py       one engine and one window at a time
-duallink/assets/           tray icons (made by tools/make_icon.py)
-native/DualLinkWindow/     the window (C#, WinUI 3) - open native/DualLinkWindow.sln in Visual Studio
+common/                    shared by both programs: single instance, clipboard, paths
+engine/src/main.rs         entry point (engine, --cleanup)
+engine/src/service.rs      wires everything together, opens/closes the window, answers the window's requests
+engine/src/api.rs          the local control API the window talks to
+engine/src/tray.rs         tray icon straight from the Windows API
+engine/src/proxy.rs        SOCKS5 proxy + automatic balancing
+engine/src/controller.rs   settings, on/off, statistics, traffic check
+engine/src/qbt.rs          qBittorrent Web UI setup/restore
+engine/src/speedtest.rs    per-link speed test
+engine/src/updates.rs      update check against GitHub Releases
+engine/src/diag.rs         which programs use DualLink, and which go around it
+engine/src/net.rs          adapters, TCP connections and program names straight from Windows
+window/ui/                 what the window looks like (Slint)
+window/src/                what the window does; demo.rs is the made-up data for --demo
+assets/                    icons
 installer/DualLink.iss     Windows installer script
-tests/                     pytest suite (runs on Windows in CI)
 ```
+
+Tests live next to the code (`cargo test --workspace`; they run on Windows in CI).
 
 Every build on GitHub also starts the built app, measures the memory of the engine and the window, takes
 screenshots and writes the numbers to the run's summary page. The window can photograph all of its own
 screens: `DualLinkWindow.exe --demo --screenshots shots` (made-up data) or `--screenshots shots` (your running
-DualLink, read-only) - in Visual Studio these are the "Demo screenshots" and "Screenshots of the running DualLink"
-start options.
+DualLink, read-only). `--theme light` or `--theme dark` forces a theme.
 
 Settings are stored in `%APPDATA%\DualLink\config.json`. That includes the qBittorrent Web UI password,
 if you enter one, in plain text. Nothing leaves your PC: the proxy only listens on 127.0.0.1.
 
 ## License
 
-MIT
+MIT. The window uses [Slint](https://slint.dev) under its royalty-free desktop license, which is why
+Settings has a small "Made with Slint" note.

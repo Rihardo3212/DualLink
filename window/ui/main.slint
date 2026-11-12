@@ -1,0 +1,1094 @@
+// DualLink's window: speed, connections and apps, with Settings on the right and dialogs on top.
+// Everything shown here is decided by the Rust side (window/src); this file only draws it.
+import { ComboBox, LineEdit, ScrollView, Palette, Spinner, AboutSlint } from "std-widgets.slint";
+import { Th, T, Wrap, SectionTitle, Divider, Card, Btn, Link, Toggle, Badge, CrossBtn, Meter, Code } from "widgets.slint";
+
+export struct Tile { name: string, sub: string, speed: string, color: color, dim: bool, bar: float }
+export struct AppItem { key: string, name: string, badge: string, color: color, status: string, tone: int, on: bool, fix: bool, removable: bool }
+export struct Series { line: string, area: string, color: color }
+export struct Bullet { text: string, codes: [string], tail: string }
+export struct Step { title: string, note: string, where: string, bullets: [Bullet], done: bool, action: string, test: bool }
+export struct MoreApp { key: string, name: string, badge: string, color: color, desc: string, added: bool }
+export struct SpeedRow { label: string, fraction: float, color: color, big: string, small: string, error: string }
+export struct Note { kind: string, text: string }
+export struct CheckRow { label: string, detail: string, windows: string, through: string, around: string, bad: bool }
+
+component Field inherits VerticalLayout {
+    in property <string> label;
+    spacing: 5px;
+    padding-bottom: 12px;
+    T { text: root.label; color: Th.muted; font-size: 12.5px; }
+    @children
+}
+
+component ToggleRow inherits HorizontalLayout {
+    in property <string> title;
+    in property <string> description;
+    in property <bool> checked;
+    callback toggled(bool);
+    padding-top: 6px;
+    padding-bottom: 6px;
+    spacing: 12px;
+    VerticalLayout {
+        alignment: center;
+        spacing: 1px;
+        Wrap { text: root.title; color: Th.text; font-size: 14px; }
+        if root.description != "" : Wrap { text: root.description; color: Th.faint; font-size: 11.5px; }
+    }
+    VerticalLayout {
+        alignment: center;
+        Toggle { checked: root.checked; label: root.title; toggled(on) => { root.toggled(on); } }
+    }
+}
+
+component Section inherits VerticalLayout {
+    in property <string> title;
+    in property <bool> first;
+    padding-bottom: 6px;
+    if !root.first : Divider { }
+    VerticalLayout {
+        padding-top: 14px;
+        padding-bottom: 10px;
+        SectionTitle { text: root.title; }
+    }
+    @children
+}
+
+component StepView inherits HorizontalLayout {
+    in property <Step> step;
+    in property <int> number;
+    in property <bool> test-busy;
+    in property <string> test-result;
+    in property <int> test-tone;
+    callback action();
+    callback test();
+    callback copy(string);
+    spacing: 14px;
+    padding-top: 4px;
+    padding-bottom: 14px;
+    VerticalLayout {
+        alignment: start;
+        Rectangle {
+            width: 26px;
+            height: 26px;
+            border-radius: 13px;
+            background: Th.inner;
+            border-width: 1px;
+            border-color: root.step.done ? Th.line.mix(Th.on, 0.6) : Th.line;
+            Text {
+                text: root.step.done ? "✓" : root.number;
+                color: root.step.done ? Th.on : Th.text;
+                font-size: 12.5px;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+    VerticalLayout {
+        spacing: 4px;
+        HorizontalLayout {
+            spacing: 5px;
+            alignment: start;
+            T { text: root.step.title; font-size: 14px; font-weight: 600; }
+            if root.step.note != "" : T { text: root.step.note; font-size: 14px; color: Th.faint; }
+        }
+        if root.step.where != "" : Wrap { text: root.step.where; }
+        for b in root.step.bullets : HorizontalLayout {
+            spacing: 6px;
+            alignment: start;
+            VerticalLayout {
+                alignment: start;
+                T { text: "•"; color: Th.muted; font-size: 12.5px; }
+            }
+            if b.codes.length == 0 : Wrap { text: b.text; max-width: 560px; }
+            if b.codes.length > 0 : T { text: b.text; color: Th.muted; font-size: 12.5px; }
+            for c in b.codes : HorizontalLayout {
+                spacing: 6px;
+                Code { text: c; }
+                Btn { text: "Copy"; small: true; height: 20px; clicked => { root.copy(c); } }
+            }
+            if b.tail != "" : T { text: b.tail; color: Th.faint; font-size: 12.5px; }
+        }
+        if root.step.test : HorizontalLayout {
+            spacing: 10px;
+            padding-top: 4px;
+            VerticalLayout {
+                alignment: start;
+                Btn { text: "Test connection"; primary: true; small: true; enabled: !root.test-busy; clicked => { root.test(); } }
+            }
+            Wrap { text: root.test-result; color: Th.tone(root.test-tone); vertical-alignment: center; }
+        }
+        if root.step.action != "" : HorizontalLayout {
+            alignment: start;
+            padding-top: 4px;
+            Btn { text: root.step.action; small: true; clicked => { root.action(); } }
+        }
+    }
+}
+
+component NoteBox inherits Rectangle {
+    in property <Note> note;
+    property <color> tint: root.note.kind == "warn" ? Th.warn : root.note.kind == "good" ? Th.on : Th.accent;
+    background: Th.inner;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: root.note.kind == "info" ? Th.line : Th.line.mix(root.tint, 0.65);
+    HorizontalLayout {
+        padding: 10px;
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 10px;
+        VerticalLayout {
+            alignment: start;
+            T { text: root.note.kind == "warn" ? "!" : root.note.kind == "good" ? "✓" : "i"; color: root.tint; font-weight: 700; }
+        }
+        Wrap { text: root.note.text; color: Th.text; font-size: 13px; }
+    }
+}
+
+export component MainWindow inherits Window {
+    title: "DualLink";
+    icon: @image-url("../../assets/logo.png");
+    preferred-width: 920px;
+    preferred-height: 720px;
+    min-width: 720px;
+    min-height: 560px;
+    background: Th.bg;
+    default-font-size: 13px;
+
+    // ---- the main screen ---------------------------------------------------------------- //
+    in property <bool> power-on;
+    in property <bool> power-busy;
+    in property <string> state-bold: "Off";
+    in property <string> state-rest;
+    in property <string> speed-num: "0";
+    in property <string> speed-unit: "B/s";
+    in property <[Series]> chart;
+    in property <[string]> chart-labels: ["", "", "0"];
+    out property <length> chart-w: plot.width;
+    out property <length> chart-h: plot.height;
+    in property <[Tile]> tiles;
+    in property <[AppItem]> apps;
+    in property <string> update-label;
+    in property <string> toast-text;
+    in property <bool> toast-error;
+    in property <bool> toast-shown;
+    callback power-clicked();
+    callback chart-resized();
+    callback open-speed-test();
+    callback open-traffic-check();
+    callback open-update();
+    callback open-more-apps();
+    callback app-setup(string);
+    callback app-toggled(string, bool);
+    callback app-remove(string);
+
+    // ---- settings ------------------------------------------------------------------------- //
+    in-out property <bool> settings-open;
+    in property <[string]> adapter-labels;
+    in property <string> adapter-placeholder: "Choose a connection…";
+    in-out property <int> eth-index: -1;
+    in-out property <int> hot-index: -1;
+    in property <int> extra-count;
+    in-out property <int> extra0-index: -1;
+    in-out property <int> extra1-index: -1;
+    in property <string> extra-hint;
+    in property <bool> s-auto;
+    in property <bool> s-recycle;
+    in property <bool> s-on-hotspot;
+    in property <bool> s-on-start;
+    in property <bool> s-tray;
+    in property <bool> s-autostart;
+    in property <bool> s-updates;
+    in-out property <string> share-eth;
+    in-out property <string> share-hot;
+    in-out property <string> quota;
+    in-out property <string> port;
+    in property <bool> restart-note;
+    in property <string> version-text: "DualLink";
+    in property <bool> checking-updates;
+    callback setting-bool(string, bool);
+    callback setting-text(string, string);
+    callback adapter-chosen(int, int);
+    callback add-extra();
+    callback remove-extra(int);
+    callback refresh-adapters();
+    callback check-updates();
+
+    // ---- dialogs -------------------------------------------------------------------------- //
+    in property <string> dialog;             // "", guide, more, remove, update, speed, check
+    in property <string> dialog-title;
+    in property <string> dialog-primary;
+    in property <bool> dialog-primary-enabled: true;
+    in property <string> dialog-secondary;
+    in property <string> dialog-close: "Done";
+    callback dialog-primary-clicked();
+    callback dialog-secondary-clicked();
+    callback dialog-closed();
+    callback copy(string);
+    // guides
+    in property <[Step]> steps;
+    in property <string> guide-tip;
+    in property <string> guide-foot;
+    in property <bool> guide-qbt;
+    in-out property <bool> qbt-more;
+    in property <bool> test-busy;
+    in property <string> test-result;
+    in property <int> test-tone;
+    in-out property <string> qbt-url;
+    in-out property <string> qbt-user;
+    in-out property <string> qbt-pass;
+    in property <bool> qbt-reconnect;
+    callback step-action(int);
+    callback test-qbt();
+    // more apps
+    in property <[MoreApp]> more-apps;
+    callback more-clicked(string);
+    // remove / update / plain text
+    in property <string> body-text;
+    in property <string> body-tip;
+    in property <string> notes-text;
+    in property <bool> progress-shown;
+    in property <float> progress;
+    in property <string> progress-text;
+    in property <bool> progress-bad;
+    // speed test
+    in property <bool> speed-running;
+    in property <string> speed-status;
+    in property <[SpeedRow]> speed-rows;
+    in property <string> speed-together;
+    in property <string> speed-foot;
+    // traffic check
+    in property <bool> check-busy;
+    in property <[Note]> check-notes;
+    in property <[string]> check-through;
+    in property <[CheckRow]> check-rows;
+    in property <bool> check-done;
+    in property <string> check-foot;
+
+    public function set-dark(dark: bool) {
+        Palette.color-scheme = dark ? ColorScheme.dark : ColorScheme.light;
+    }
+    public pure function is-dark() -> bool {
+        return Th.dark;
+    }
+    public function scroll-settings-to-end() {
+        settings-scroll.content-y = min(0px, settings-scroll.visible-height - settings-scroll.content-height);
+    }
+    public function scroll-dialog-to-end() {
+        dialog-scroll.content-y = min(0px, dialog-scroll.visible-height - dialog-scroll.content-height);
+    }
+
+    changed chart-w => { root.chart-resized(); }
+    changed chart-h => { root.chart-resized(); }
+
+    page := ScrollView {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        content-width: root.width;
+        content-height: page-end.y + 8px;
+        // Sized from the window, not from the scroll area, and tall enough for anything: the real height is
+        // read from where the last item ends up (a layout's own estimate counts wrapped text as one line).
+        content := VerticalLayout {
+            y: 0;
+            height: 20000px;
+            width: min(root.width, 1180px);
+            x: (root.width - self.width) / 2;
+            padding: 22px;
+            padding-top: 16px;
+            spacing: 14px;
+            alignment: start;
+
+            // header
+            HorizontalLayout {
+                spacing: 12px;
+                Image { source: @image-url("../../assets/logo.png"); width: 34px; height: 34px; }
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    T { text: "DualLink"; font-size: 17px; font-weight: 650; }
+                    T { text: "Ethernet + phone hotspot for faster downloads"; font-size: 12.5px; color: Th.muted; overflow: elide; }
+                }
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    VerticalLayout {
+                        alignment: center;
+                        if root.update-label != "" : Btn {
+                            text: root.update-label;
+                            fill: Th.on.with-alpha(0.16);
+                            stroke: Th.on.with-alpha(0.45);
+                            ink: Th.on;
+                            clicked => { root.open-update(); }
+                        }
+                    }
+                    VerticalLayout { alignment: center; Btn { text: "Speed test"; clicked => { root.open-speed-test(); } } }
+                    VerticalLayout { alignment: center; Btn { text: "Traffic check"; clicked => { root.open-traffic-check(); } } }
+                    VerticalLayout { alignment: center; Btn { text: "Settings"; clicked => { root.settings-open = true; } } }
+                }
+            }
+
+            // power button, speed, graph and one tile per connection
+            Card {
+                VerticalLayout {
+                    padding: 22px;
+                    padding-top: 16px;
+                    padding-bottom: 18px;
+                    HorizontalLayout {
+                        spacing: 16px;
+                        alignment: start;
+                        Rectangle {
+                            width: 96px;
+                            height: 96px;
+                            border-radius: 48px;
+                            background: root.power-on ? Th.on.with-alpha(0.1) : transparent;
+                            opacity: root.power-busy ? 0.6 : 1;
+                            Rectangle {
+                                width: 84px;
+                                height: 84px;
+                                border-radius: 42px;
+                                border-width: 2px;
+                                border-color: root.power-on ? Th.on : power-touch.has-hover ? Th.faint : Th.line;
+                                background: root.power-on ? Th.on.with-alpha(0.11) : power-touch.has-hover ? Th.text.with-alpha(0.06) : Th.inner;
+                                accessible-role: button;
+                                accessible-label: "Turn DualLink on or off";
+                                accessible-action-default => { root.power-clicked(); }
+                                Path {
+                                    width: 30px;
+                                    height: 30px;
+                                    viewbox-width: 24;
+                                    viewbox-height: 24;
+                                    commands: "M 7.2 5.8 A 8 8 0 1 0 16.8 5.8 M 12 2.5 L 12 11.5";
+                                    stroke: root.power-on ? Th.on : power-touch.has-hover ? Th.muted : Th.faint;
+                                    stroke-width: 2.4px;
+                                    stroke-line-cap: round;
+                                }
+                                power-touch := TouchArea {
+                                    enabled: !root.power-busy;
+                                    clicked => { root.power-clicked(); }
+                                }
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 1;
+                            HorizontalLayout {
+                                spacing: 4px;
+                                alignment: start;
+                                T { text: root.state-bold; font-weight: 600; }
+                                T { text: root.state-rest; color: Th.muted; overflow: elide; }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                alignment: start;
+                                T { text: root.speed-num; font-size: 42px; font-weight: 650; }
+                                VerticalLayout {
+                                    alignment: end;
+                                    padding-bottom: 9px;
+                                    T { text: root.speed-unit; font-size: 17px; font-weight: 500; color: Th.muted; }
+                                }
+                            }
+                        }
+                    }
+                    Rectangle {
+                        height: 124px;
+                        plot := Rectangle {
+                            x: 0;
+                            y: 20px;
+                            width: parent.width - 58px;
+                            height: 100px;
+                            for k in 3 : Rectangle {
+                                x: 0;
+                                y: k * (parent.height - 1px) / 2;
+                                height: 1px;
+                                background: Th.line;
+                            }
+                            for s in root.chart : Rectangle {
+                                Path {
+                                    width: plot.width;
+                                    height: plot.height;
+                                    viewbox-width: plot.width / 1px;
+                                    viewbox-height: plot.height / 1px;
+                                    commands: s.area;
+                                    fill: s.color.with-alpha(0.22);
+                                    stroke-width: 0;
+                                }
+                                Path {
+                                    width: plot.width;
+                                    height: plot.height;
+                                    viewbox-width: plot.width / 1px;
+                                    viewbox-height: plot.height / 1px;
+                                    commands: s.line;
+                                    stroke: s.color;
+                                    stroke-width: 1.8px;
+                                    stroke-line-join: round;
+                                }
+                            }
+                        }
+                        for label[k] in root.chart-labels : T {
+                            x: plot.width + 8px;
+                            y: plot.y + k * (plot.height - 1px) / 2 - 8px;
+                            height: 16px;
+                            text: label;
+                            font-size: 11px;
+                            color: Th.faint;
+                        }
+                    }
+                    tile-area := Rectangle {
+                        property <int> cols: max(1, min(root.tiles.length, floor((self.width + 12px) / 222px)));
+                        property <length> tile-w: (self.width - (self.cols - 1) * 12px) / self.cols;
+                        height: 12px + ceil(root.tiles.length / self.cols) * 76px - 12px;
+                        for tile[i] in root.tiles : Rectangle {
+                            x: mod(i, tile-area.cols) * (tile-area.tile-w + 12px);
+                            y: 12px + floor(i / tile-area.cols) * 76px;
+                            width: tile-area.tile-w;
+                            height: 64px;
+                            border-radius: 12px;
+                            border-width: 1px;
+                            border-color: Th.inner-stroke;
+                            background: Th.inner;
+                            opacity: tile.dim ? 0.6 : 1;
+                            HorizontalLayout {
+                                padding-left: 14px;
+                                padding-right: 14px;
+                                spacing: 12px;
+                                VerticalLayout {
+                                    alignment: center;
+                                    Rectangle { width: 10px; height: 10px; border-radius: 5px; background: tile.color; }
+                                }
+                                VerticalLayout {
+                                    alignment: center;
+                                    spacing: 1px;
+                                    horizontal-stretch: 1;
+                                    T { text: tile.name; font-size: 13.5px; font-weight: 600; overflow: elide; }
+                                    T { text: tile.sub; font-size: 12px; color: Th.muted; overflow: elide; }
+                                    if tile.bar >= 0 : Meter { value: tile.bar; tint: Th.warn; }
+                                }
+                                T { text: tile.speed; font-size: 18px; font-weight: 650; horizontal-stretch: 0; }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // apps
+            Card {
+                VerticalLayout {
+                    padding-left: 18px;
+                    padding-right: 18px;
+                    VerticalLayout {
+                        padding-top: 12px;
+                        padding-bottom: 4px;
+                        SectionTitle { text: "APPS"; }
+                    }
+                    if root.apps.length == 0 : VerticalLayout {
+                        padding-top: 4px;
+                        padding-bottom: 12px;
+                        Wrap { text: "No apps yet. Add the download apps you want DualLink to speed up."; }
+                    }
+                    for app[i] in root.apps : VerticalLayout {
+                        if i > 0 : Divider { }
+                        HorizontalLayout {
+                            padding-top: 11px;
+                            padding-bottom: 11px;
+                            spacing: 12px;
+                            Badge { text: app.badge; tint: app.color; }
+                            VerticalLayout {
+                                alignment: center;
+                                spacing: 1px;
+                                horizontal-stretch: 1;
+                                T { text: app.name; font-size: 13.5px; font-weight: 600; }
+                                T { text: app.status; font-size: 12px; color: Th.tone(app.tone); overflow: elide; }
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                Btn {
+                                    text: app.fix ? "Fix" : "Set up";
+                                    small: true;
+                                    primary: app.fix;
+                                    fill: app.fix ? Th.warn : Th.button;
+                                    ink: app.fix ? Th.warn-ink : Th.text;
+                                    clicked => { root.app-setup(app.key); }
+                                }
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                Toggle {
+                                    checked: app.on;
+                                    label: "Use DualLink with " + app.name;
+                                    toggled(on) => { root.app-toggled(app.key, on); }
+                                }
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                Rectangle {
+                                    width: 32px;
+                                    height: 32px;
+                                    if app.removable : CrossBtn { quiet: true; label: "Remove " + app.name; clicked => { root.app-remove(app.key); } }
+                                }
+                            }
+                        }
+                    }
+                    Divider { }
+                    HorizontalLayout {
+                        alignment: start;
+                        padding-top: 8px;
+                        padding-bottom: 10px;
+                        Link { text: "+ Add an app"; clicked => { root.open-more-apps(); } }
+                    }
+                }
+            }
+            page-end := Rectangle { height: 0px; }
+        }
+    }
+
+    // ---- Settings: a panel that opens from the right -------------------------------------- //
+    if root.settings-open : Rectangle {
+        background: Th.scrim;
+        TouchArea { clicked => { root.settings-open = false; } }
+    }
+    settings-panel := Rectangle {
+        x: root.settings-open ? root.width - self.width : root.width;
+        width: min(420px, root.width);
+        height: root.height;
+        visible: self.x < root.width;
+        background: Th.panel;
+        animate x { duration: 160ms; easing: ease-out; }
+        TouchArea { }
+        VerticalLayout {
+            HorizontalLayout {
+                padding-left: 20px;
+                padding-right: 16px;
+                padding-top: 14px;
+                padding-bottom: 6px;
+                T { text: "Settings"; font-size: 17px; font-weight: 600; horizontal-stretch: 1; }
+                CrossBtn { label: "Close settings"; clicked => { root.settings-open = false; } }
+            }
+            settings-scroll := ScrollView {
+                content-width: settings-panel.width;
+                content-height: settings-end.y + 24px;
+                settings-body := VerticalLayout {
+                    y: 0;
+                    height: 20000px;
+                    width: settings-panel.width;
+                    padding-left: 20px;
+                    padding-right: 20px;
+                    padding-bottom: 24px;
+                    alignment: start;
+                    if root.restart-note : Wrap { text: "A new proxy port applies the next time you turn DualLink on."; color: Th.warn; font-size: 12px; }
+
+                    Section {
+                        title: "CONNECTIONS";
+                        first: true;
+                        Field {
+                            label: "Ethernet (home internet)";
+                            ComboBox {
+                                model: root.adapter-labels;
+                                current-index <=> root.eth-index;
+                                selected => { root.adapter-chosen(0, self.current-index); }
+                            }
+                        }
+                        Field {
+                            label: "Phone hotspot";
+                            ComboBox {
+                                model: root.adapter-labels;
+                                current-index <=> root.hot-index;
+                                selected => { root.adapter-chosen(1, self.current-index); }
+                            }
+                            HorizontalLayout {
+                                alignment: start;
+                                spacing: 3px;
+                                T { text: "Not listed? Connect your phone, then"; font-size: 11.5px; color: Th.faint; }
+                                Link { text: "refresh the list"; size: 11.5px; clicked => { root.refresh-adapters(); } }
+                            }
+                        }
+                        if root.extra-count > 0 : HorizontalLayout {
+                            spacing: 8px;
+                            padding-bottom: 8px;
+                            ComboBox {
+                                model: root.adapter-labels;
+                                current-index <=> root.extra0-index;
+                                selected => { root.adapter-chosen(2, self.current-index); }
+                            }
+                            CrossBtn { label: "Remove this connection"; clicked => { root.remove-extra(0); } }
+                        }
+                        if root.extra-count > 1 : HorizontalLayout {
+                            spacing: 8px;
+                            padding-bottom: 8px;
+                            ComboBox {
+                                model: root.adapter-labels;
+                                current-index <=> root.extra1-index;
+                                selected => { root.adapter-chosen(3, self.current-index); }
+                            }
+                            CrossBtn { label: "Remove this connection"; clicked => { root.remove-extra(1); } }
+                        }
+                        if root.extra-count < 2 : HorizontalLayout {
+                            alignment: start;
+                            Link { text: "+ Add another connection"; clicked => { root.add-extra(); } }
+                        }
+                        Wrap { text: root.extra-hint; color: Th.faint; font-size: 11.5px; }
+                    }
+
+                    Section {
+                        title: "BALANCING";
+                        ToggleRow {
+                            title: "Favour the faster connection automatically";
+                            description: "Gives the faster link more of the new connections";
+                            checked: root.s-auto;
+                            toggled(on) => { root.setting-bool("auto", on); }
+                        }
+                        if root.s-auto : ToggleRow {
+                            title: "Move idle connections to the faster link";
+                            description: "Reconnects peers that have been idle for 90 s";
+                            checked: root.s-recycle;
+                            toggled(on) => { root.setting-bool("recycle", on); }
+                        }
+                        if !root.s-auto : HorizontalLayout {
+                            spacing: 12px;
+                            Field {
+                                label: "Ethernet share";
+                                LineEdit {
+                                text <=> root.share-eth;
+                                input-type: decimal;
+                                accepted(t) => { root.setting-text("share_eth", t); }
+                                changed has-focus => {
+                                    if (!self.has-focus) {
+                                        root.setting-text("share_eth", self.text);
+                                    }
+                                }
+                            }
+                            }
+                            Field {
+                                label: "Hotspot share";
+                                LineEdit {
+                                text <=> root.share-hot;
+                                input-type: decimal;
+                                accepted(t) => { root.setting-text("share_hot", t); }
+                                changed has-focus => {
+                                    if (!self.has-focus) {
+                                        root.setting-text("share_hot", self.text);
+                                    }
+                                }
+                            }
+                            }
+                        }
+                    }
+
+                    Section {
+                        title: "MOBILE DATA";
+                        Field {
+                            label: "Stop using the hotspot after (MB)";
+                            LineEdit {
+                                text <=> root.quota;
+                                input-type: decimal;
+                                accepted(t) => { root.setting-text("quota_mb", t); }
+                                changed has-focus => {
+                                    if (!self.has-focus) {
+                                        root.setting-text("quota_mb", self.text);
+                                    }
+                                }
+                            }
+                            Wrap { text: "0 = no limit. Counted from when you turn DualLink on."; color: Th.faint; font-size: 11.5px; }
+                        }
+                    }
+
+                    Section {
+                        title: "AUTOMATION";
+                        ToggleRow {
+                            title: "Turn on when the hotspot connects";
+                            description: "Plug in your phone and DualLink starts combining";
+                            checked: root.s-on-hotspot;
+                            toggled(on) => { root.setting-bool("auto_on_hotspot", on); }
+                        }
+                        ToggleRow {
+                            title: "Turn on when DualLink starts";
+                            description: "Combine straight away - handy with Start with Windows";
+                            checked: root.s-on-start;
+                            toggled(on) => { root.setting-bool("auto_on_start", on); }
+                        }
+                    }
+
+                    Section {
+                        title: "APP";
+                        ToggleRow {
+                            title: "Keep running in the tray when closed";
+                            checked: root.s-tray;
+                            toggled(on) => { root.setting-bool("tray", on); }
+                        }
+                        ToggleRow {
+                            title: "Start with Windows";
+                            checked: root.s-autostart;
+                            toggled(on) => { root.setting-bool("autostart", on); }
+                        }
+                        Field {
+                            label: "Proxy port";
+                            LineEdit {
+                                text <=> root.port;
+                                input-type: number;
+                                accepted(t) => { root.setting-text("port", t); }
+                                changed has-focus => {
+                                    if (!self.has-focus) {
+                                        root.setting-text("port", self.text);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Section {
+                        title: "UPDATES";
+                        ToggleRow {
+                            title: "Check for updates";
+                            description: "Looks at the GitHub Releases page twice a day";
+                            checked: root.s-updates;
+                            toggled(on) => { root.setting-bool("check_updates", on); }
+                        }
+                        HorizontalLayout {
+                            padding-top: 4px;
+                            padding-bottom: 8px;
+                            T { text: root.version-text; font-size: 12.5px; color: Th.faint; horizontal-stretch: 1; }
+                            Btn { text: "Check now"; small: true; enabled: !root.checking-updates; clicked => { root.check-updates(); } }
+                        }
+                    }
+
+                    Section {
+                        title: "ABOUT";
+                        Wrap { text: "DualLink's window is made with Slint."; color: Th.faint; font-size: 11.5px; }
+                        HorizontalLayout {
+                            alignment: start;
+                            padding-top: 6px;
+                            AboutSlint { width: 150px; height: 104px; }
+                        }
+                    }
+                    settings-end := Rectangle { height: 0px; }
+                }
+            }
+        }
+    }
+
+    // ---- dialogs -------------------------------------------------------------------------- //
+    if root.dialog != "" : Rectangle {
+        background: Th.scrim;
+        TouchArea { }
+    }
+    dialog-card := Rectangle {
+        visible: root.dialog != "";
+        width: min(root.width - 48px, 640px);
+        height: min(root.height - 48px, dialog-end.y + 8px + dialog-head.preferred-height + dialog-foot.preferred-height + 2px);
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        background: Th.panel;
+        border-radius: 10px;
+        border-width: 1px;
+        border-color: Th.card-stroke;
+        drop-shadow-blur: 24px;
+        drop-shadow-color: #00000050;
+        drop-shadow-offset-y: 8px;
+        VerticalLayout {
+            dialog-head := VerticalLayout {
+                padding: 24px;
+                padding-bottom: 12px;
+                T { text: root.dialog-title; font-size: 20px; font-weight: 600; }
+            }
+            dialog-scroll := ScrollView {
+                content-width: dialog-card.width;
+                content-height: dialog-end.y + 8px;
+                dialog-body := VerticalLayout {
+                    y: 0;
+                    height: 20000px;
+                    width: dialog-card.width;
+                    padding-left: 24px;
+                    padding-right: 24px;
+                    padding-bottom: 8px;
+                    alignment: start;
+
+                    // set-up guides
+                    if root.dialog == "guide" : VerticalLayout {
+                        for step[i] in root.steps : StepView {
+                            step: step;
+                            number: i + 1;
+                            test-busy: root.test-busy;
+                            test-result: root.test-result;
+                            test-tone: root.test-tone;
+                            action => { root.step-action(i); }
+                            test => { root.test-qbt(); }
+                            copy(text) => { root.copy(text); }
+                        }
+                        if root.guide-qbt : Rectangle {
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Th.line;
+                            background: Th.inner;
+                            VerticalLayout {
+                                Rectangle {
+                                    height: 40px;
+                                    HorizontalLayout {
+                                        padding-left: 14px;
+                                        padding-right: 14px;
+                                        T { text: "Using a different port, or a Web UI password?"; horizontal-stretch: 1; }
+                                        T { text: root.qbt-more ? "▴" : "▾"; color: Th.muted; horizontal-stretch: 0; }
+                                    }
+                                    TouchArea { clicked => { root.qbt-more = !root.qbt-more; } }
+                                }
+                                if root.qbt-more : VerticalLayout {
+                                    padding: 14px;
+                                    padding-top: 4px;
+                                    Field {
+                                        label: "Web UI address";
+                                        LineEdit { text <=> root.qbt-url; edited(t) => { root.setting-text("qbt_url", t); } }
+                                    }
+                                    HorizontalLayout {
+                                        spacing: 12px;
+                                        Field {
+                                            label: "Username";
+                                            LineEdit { text <=> root.qbt-user; edited(t) => { root.setting-text("qbt_user", t); } }
+                                        }
+                                        Field {
+                                            label: "Password";
+                                            LineEdit { text <=> root.qbt-pass; input-type: password; edited(t) => { root.setting-text("qbt_pass", t); } }
+                                        }
+                                    }
+                                    Wrap { text: "Only needed if you don't tick \"Bypass authentication for clients on localhost\"."; color: Th.faint; font-size: 12px; }
+                                    ToggleRow {
+                                        title: "Reconnect running torrents when switching";
+                                        description: "So existing peers move over immediately";
+                                        checked: root.qbt-reconnect;
+                                        toggled(on) => { root.setting-bool("reconnect", on); }
+                                    }
+                                }
+                            }
+                        }
+                        if root.guide-tip != "" : Wrap { text: root.guide-tip; color: Th.faint; font-size: 12px; }
+                        VerticalLayout {
+                            padding-top: 10px;
+                            Wrap { text: root.guide-foot; color: Th.faint; font-size: 12px; }
+                        }
+                    }
+
+                    // the list of apps that can be added
+                    if root.dialog == "more" : VerticalLayout {
+                        for a[i] in root.more-apps : VerticalLayout {
+                            if i > 0 : Divider { }
+                            HorizontalLayout {
+                                padding-top: 10px;
+                                padding-bottom: 10px;
+                                spacing: 12px;
+                                Badge { text: a.badge; tint: a.color; }
+                                VerticalLayout {
+                                    alignment: center;
+                                    horizontal-stretch: 1;
+                                    T { text: a.name; font-size: 13.5px; font-weight: 600; }
+                                    T { text: a.desc; font-size: 12px; color: Th.faint; }
+                                }
+                                VerticalLayout {
+                                    alignment: center;
+                                    Btn { text: a.added ? "Set up" : "Add"; primary: !a.added; small: true; clicked => { root.more-clicked(a.key); } }
+                                }
+                            }
+                        }
+                        VerticalLayout {
+                            padding-top: 10px;
+                            T { text: "Any app with a SOCKS5 proxy setting works."; font-size: 12px; color: Th.faint; }
+                        }
+                    }
+
+                    // removing an app, and the update
+                    if root.dialog == "remove" || root.dialog == "update" : VerticalLayout {
+                        spacing: 10px;
+                        Wrap { text: root.body-text; color: Th.text; font-size: 13.5px; }
+                        if root.notes-text != "" : Rectangle {
+                            background: Th.inner;
+                            border-radius: 10px;
+                            border-width: 1px;
+                            border-color: Th.line;
+                            VerticalLayout {
+                                padding: 10px;
+                                padding-left: 12px;
+                                padding-right: 12px;
+                                Wrap { text: root.notes-text; }
+                            }
+                        }
+                        Wrap { text: root.body-tip; color: Th.faint; font-size: 12px; }
+                        if root.progress-shown : VerticalLayout {
+                            spacing: 6px;
+                            Meter { value: root.progress; }
+                            Wrap { text: root.progress-text; color: root.progress-bad ? Th.bad : Th.muted; }
+                        }
+                    }
+
+                    // speed test
+                    if root.dialog == "speed" : VerticalLayout {
+                        if root.speed-running : HorizontalLayout {
+                            spacing: 10px;
+                            alignment: start;
+                            Spinner { width: 18px; height: 18px; indeterminate: true; }
+                            T { text: root.speed-status; color: Th.muted; }
+                        }
+                        if !root.speed-running : VerticalLayout {
+                            padding-top: 2px;
+                            padding-bottom: 10px;
+                            Wrap { text: "Measures how fast each connection can download on its own, one after the other. For accurate results, pause big downloads first. The hotspot part uses a few dozen MB of mobile data."; }
+                        }
+                        if !root.speed-running : VerticalLayout {
+                            for r[i] in root.speed-rows : VerticalLayout {
+                                if i > 0 : Divider { }
+                                HorizontalLayout {
+                                    padding-top: 10px;
+                                    padding-bottom: 10px;
+                                    spacing: 12px;
+                                    T { text: r.label; font-size: 14px; font-weight: 600; width: 110px; overflow: elide; }
+                                    VerticalLayout {
+                                        alignment: center;
+                                        Meter { height: 10px; value: r.fraction; tint: r.color; }
+                                    }
+                                    if r.error != "" : Wrap { text: r.error; color: Th.bad; font-size: 12px; max-width: 220px; horizontal-stretch: 0; }
+                                    if r.error == "" : VerticalLayout {
+                                        alignment: center;
+                                        horizontal-stretch: 0;
+                                        T { text: r.big; font-size: 14px; font-weight: 650; horizontal-alignment: right; }
+                                        T { text: r.small; font-size: 11.5px; color: Th.muted; horizontal-alignment: right; }
+                                    }
+                                }
+                            }
+                            if root.speed-together != "" : Rectangle {
+                                background: Th.inner;
+                                border-radius: 12px;
+                                border-width: 1px;
+                                border-color: Th.line;
+                                VerticalLayout {
+                                    padding: 12px;
+                                    padding-left: 14px;
+                                    padding-right: 14px;
+                                    spacing: 2px;
+                                    Wrap { text: root.speed-together; color: Th.text; font-size: 13px; }
+                                    Wrap { text: "DualLink uses these results to favour the faster connection from the start."; }
+                                }
+                            }
+                            VerticalLayout {
+                                padding-top: 10px;
+                                T { text: root.speed-foot; font-size: 12px; color: Th.faint; }
+                            }
+                        }
+                    }
+
+                    // traffic check
+                    if root.dialog == "check" : VerticalLayout {
+                        if root.check-busy : HorizontalLayout {
+                            spacing: 10px;
+                            alignment: start;
+                            Spinner { width: 18px; height: 18px; indeterminate: true; }
+                            T { text: "Measuring for 3 seconds - keep your download running…"; color: Th.muted; }
+                        }
+                        if !root.check-busy : VerticalLayout {
+                            spacing: 8px;
+                            for n in root.check-notes : NoteBox { note: n; }
+                        }
+                        if !root.check-busy && root.check-done : VerticalLayout {
+                            VerticalLayout {
+                                padding-top: 14px;
+                                padding-bottom: 6px;
+                                SectionTitle { text: "PROGRAMS USING DUALLINK"; }
+                            }
+                            if root.check-through.length == 0 : T { text: "None right now."; color: Th.faint; }
+                            for name in root.check-through : HorizontalLayout {
+                                alignment: start;
+                                padding-bottom: 6px;
+                                Rectangle {
+                                    height: 26px;
+                                    border-radius: 13px;
+                                    border-width: 1px;
+                                    border-color: Th.line.mix(Th.on, 0.65);
+                                    background: Th.inner;
+                                    HorizontalLayout {
+                                        padding-left: 10px;
+                                        padding-right: 10px;
+                                        T { text: name; font-size: 12.5px; color: Th.on; }
+                                    }
+                                }
+                            }
+                            VerticalLayout {
+                                padding-top: 14px;
+                                padding-bottom: 6px;
+                                SectionTitle { text: "DOWNLOAD SPEED"; }
+                            }
+                            HorizontalLayout {
+                                spacing: 8px;
+                                padding-bottom: 4px;
+                                T { text: "Connection"; font-size: 12.5px; color: Th.faint; horizontal-stretch: 3; }
+                                T { text: "Windows sees"; font-size: 12.5px; color: Th.faint; horizontal-alignment: right; horizontal-stretch: 2; min-width: 96px; }
+                                T { text: "Through DualLink"; font-size: 12.5px; color: Th.faint; horizontal-alignment: right; horizontal-stretch: 2; min-width: 110px; }
+                                T { text: "Around DualLink"; font-size: 12.5px; color: Th.faint; horizontal-alignment: right; horizontal-stretch: 2; min-width: 104px; }
+                            }
+                            for r in root.check-rows : VerticalLayout {
+                                Divider { }
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    padding-top: 7px;
+                                    padding-bottom: 7px;
+                                    VerticalLayout {
+                                        horizontal-stretch: 3;
+                                        spacing: 2px;
+                                        T { text: r.label; font-size: 12.5px; font-weight: 600; }
+                                        if r.detail != "" : Wrap { text: r.detail; color: Th.faint; font-size: 11.5px; }
+                                    }
+                                    T { text: r.windows; font-size: 12.5px; horizontal-alignment: right; vertical-alignment: top; horizontal-stretch: 2; min-width: 96px; }
+                                    T { text: r.through; font-size: 12.5px; horizontal-alignment: right; vertical-alignment: top; horizontal-stretch: 2; min-width: 110px; }
+                                    T {
+                                        text: r.around;
+                                        font-size: 12.5px;
+                                        color: r.bad ? Th.warn : Th.text;
+                                        font-weight: r.bad ? 600 : 400;
+                                        horizontal-alignment: right;
+                                        vertical-alignment: top;
+                                        horizontal-stretch: 2;
+                                        min-width: 104px;
+                                    }
+                                }
+                            }
+                            VerticalLayout {
+                                padding-top: 10px;
+                                T { text: root.check-foot; font-size: 12px; color: Th.faint; }
+                            }
+                        }
+                    }
+                    dialog-end := Rectangle { height: 0px; }
+                }
+            }
+            dialog-foot := HorizontalLayout {
+                padding: 24px;
+                padding-top: 14px;
+                spacing: 8px;
+                alignment: end;
+                if root.dialog-secondary != "" : Btn { text: root.dialog-secondary; enabled: root.dialog-primary-enabled; clicked => { root.dialog-secondary-clicked(); } }
+                if root.dialog-primary != "" : Btn { text: root.dialog-primary; primary: true; enabled: root.dialog-primary-enabled; clicked => { root.dialog-primary-clicked(); } }
+                Btn { text: root.dialog-close; min-width: 90px; clicked => { root.dialog-closed(); } }
+            }
+        }
+    }
+
+    // ---- a short message at the bottom ----------------------------------------------------- //
+    Rectangle {
+        width: min(640px, toast-label.preferred-width + 34px);
+        height: toast-label.preferred-height + 22px;
+        x: (root.width - self.width) / 2;
+        y: root.height - self.height - 22px;
+        opacity: root.toast-shown ? 1 : 0;
+        background: Th.toast;
+        border-radius: 11px;
+        border-width: 1px;
+        border-color: root.toast-error ? Th.bad : Th.line;
+        animate opacity { duration: 160ms; }
+        toast-label := Text {
+            width: parent.width - 32px;
+            text: root.toast-text;
+            color: Th.text;
+            font-size: 13px;
+            wrap: word-wrap;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
