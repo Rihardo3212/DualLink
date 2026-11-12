@@ -16,84 +16,52 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
+      - uses: Swatinem/rust-cache@v2
 
-      - name: Check the tag matches the app version
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Read the app version (Cargo.toml) and check the tag matches it
         shell: pwsh
         run: |
-          $version = python -c "import duallink; print(duallink.__version__)"
-          if ("v$version" -ne "${{ github.ref_name }}") {
-            Write-Error "Tag ${{ github.ref_name }} but duallink/__init__.py says $version"
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          "VERSION=$version" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          if ("${{ github.ref }}".StartsWith("refs/tags/v") -and "v$version" -ne "${{ github.ref_name }}") {
+            Write-Error "Tag ${{ github.ref_name }} but Cargo.toml says $version"
             exit 1
           }
 
-      - name: Install dependencies
-        run: python -m pip install -r requirements-dev.txt
-
       - name: Run tests (on real Windows networking)
-        run: python -m pytest -v
+        run: cargo test --workspace
 
-      - name: Check the app imports on Windows
-        run: python -c "import pystray, duallink.service, duallink.tray; print('imports ok')"
-
-      - name: Record which repository this build belongs to (for update checks)
-        shell: bash
-        run: echo "REPO = \"$GITHUB_REPOSITORY\"" > duallink/_build_info.py
-
-      - name: Build DualLink (the engine, as a folder - starts fast, nothing to unpack on each start)
-        run: |
-          python tools/make_icon.py
-          python -m PyInstaller --noconfirm --onedir --windowed --name DualLink --icon build/icon.ico `
-            --distpath dist/folder --workpath build/folder `
-            --add-data "duallink/assets;duallink/assets" `
-            --hidden-import pystray._win32 --hidden-import duallink._build_info `
-            main.py
-
-      - name: Check the folder build starts
+      - name: Build DualLink (engine and window)
+        env:
+          DUALLINK_REPO: ${{ github.repository }}   # for update checks
         shell: pwsh
         run: |
-          $p = Start-Process -FilePath dist\folder\DualLink\DualLink.exe -ArgumentList "--cleanup" -PassThru -Wait
+          cargo build --release --workspace
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force dist/DualLink | Out-Null
+          Copy-Item target/release/DualLink.exe, target/release/DualLinkWindow.exe dist/DualLink/
+          Get-ChildItem dist/DualLink | ForEach-Object { "{0}: {1:N1} MB" -f $_.Name, ($_.Length / 1MB) }
+
+      - name: Check the engine starts
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\DualLink\DualLink.exe -ArgumentList "--cleanup" -PassThru -Wait
           if ($p.ExitCode -ne 0) { Write-Error "DualLink.exe --cleanup exited with $($p.ExitCode)"; exit 1 }
-
-      - uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: "10.0.x"
-
-      - name: Build the window (WinUI 3, compiled ahead of time)
-        shell: pwsh
-        run: |
-          $version = python -c "import duallink; print(duallink.__version__)"
-          $common = @("native/DualLinkWindow/DualLinkWindow.csproj", "-c", "Release", "-r", "win-x64",
-                      "-p:Platform=x64", "-p:Version=$version", "-o", "dist/native")
-          dotnet publish @common -p:PublishAot=true
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "::warning::Native AOT build failed - building the window without AOT instead"
-            Remove-Item dist/native -Recurse -Force -ErrorAction SilentlyContinue
-            dotnet publish @common -p:PublishAot=false
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          }
-          Remove-Item dist/native/*.pdb -ErrorAction SilentlyContinue
-          $files = Get-ChildItem dist/native -Recurse -File
-          "Window: {0:N1} MB in {1} files" -f (($files | Measure-Object Length -Sum).Sum / 1MB), $files.Count
-          Copy-Item dist/native dist/folder/DualLink/DualLinkWindow -Recurse
 
       - name: Screenshots of every screen of the window (demo data)
         shell: pwsh
         continue-on-error: true
         run: |
-          $p = Start-Process -FilePath dist\folder\DualLink\DualLinkWindow\DualLinkWindow.exe `
-                 -ArgumentList "--demo", "--screenshots", "ci/native" -PassThru
+          $p = Start-Process -FilePath dist\DualLink\DualLinkWindow.exe `
+                 -ArgumentList "--demo", "--screenshots", "ci/shots" -PassThru
           if (-not $p.WaitForExit(120000)) { $p.Kill(); Write-Host "::warning::The screenshot run timed out" }
-          Get-Content ci/native/shots.log
+          Get-Content ci/shots/shots.log
 
       - name: Memory report (engine in the tray, then with the window open)
         shell: pwsh
         continue-on-error: true
         run: |
-          $exe = (Resolve-Path dist\folder\DualLink\DualLink.exe).Path
+          $exe = (Resolve-Path dist\DualLink\DualLink.exe).Path
           $info = "$env:APPDATA\DualLink\engine.json"
           Remove-Item $info -ErrorAction SilentlyContinue
           $null = Start-Process -FilePath $exe -ArgumentList "--minimized" -PassThru
@@ -163,8 +131,7 @@ jobs:
         shell: pwsh
         run: |
           choco install innosetup -y --no-progress
-          $version = python -c "import duallink; print(duallink.__version__)"
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" installer\DualLink.iss
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$env:VERSION" installer\DualLink.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - uses: actions/upload-artifact@v5

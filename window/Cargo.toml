@@ -1,0 +1,22 @@
+[package]
+name = "duallink-window"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+build = "build.rs"
+
+[[bin]]
+name = "DualLinkWindow"
+path = "src/main.rs"
+
+[dependencies]
+duallink-common = { path = "../common" }
+serde_json.workspace = true
+slint = { version = "1.18", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-software", "raw-window-handle-06"] }
+ureq = { version = "2", default-features = false }
+png = "0.18"
+raw-window-handle = "0.6"
+
+[build-dependencies]
+slint-build = "1.18"
+winresource = "0.1"

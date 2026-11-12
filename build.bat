@@ -1,18 +1,11 @@
 @echo off
 REM Builds DualLink on your own PC (GitHub Actions does the same automatically).
-REM Needs Python 3.10+ and the .NET 10 SDK (Visual Studio 2026 has it); Inno Setup for the installer.
-python -m pip install -r requirements-dev.txt || exit /b 1
-python -m pytest -q || exit /b 1
-python tools\make_icon.py || exit /b 1
-python -m PyInstaller --noconfirm --onedir --windowed --name DualLink --icon build\icon.ico ^
-  --distpath dist\folder --workpath build\folder --add-data "duallink\assets;duallink\assets" ^
-  --hidden-import pystray._win32 ^
-  main.py || exit /b 1
-REM the window: ahead-of-time compiled if Visual Studio's C++ tools are installed, otherwise a normal build
-dotnet publish native\DualLinkWindow\DualLinkWindow.csproj -c Release -r win-x64 -p:Platform=x64 -o dist\native ^
-  || dotnet publish native\DualLinkWindow\DualLinkWindow.csproj -c Release -r win-x64 -p:Platform=x64 -p:PublishAot=false -o dist\native ^
-  || exit /b 1
-xcopy /e /i /y dist\native dist\folder\DualLink\DualLinkWindow >nul
+REM Needs Rust (https://rustup.rs) with Visual Studio's C++ build tools; Inno Setup for the installer.
+cargo test --workspace || exit /b 1
+cargo build --release --workspace || exit /b 1
+if not exist dist\DualLink mkdir dist\DualLink
+copy /y target\release\DualLink.exe dist\DualLink\ >nul || exit /b 1
+copy /y target\release\DualLinkWindow.exe dist\DualLink\ >nul || exit /b 1
 where iscc >nul 2>nul && iscc installer\DualLink.iss
 echo.
-echo Done: dist\folder\DualLink\DualLink.exe (and dist\DualLink-Setup-*.exe if Inno Setup is installed)
+echo Done: dist\DualLink\DualLink.exe (and dist\DualLink-Setup-*.exe if Inno Setup is installed)

@@ -1,0 +1,258 @@
+// DualLink's colours and the small building blocks every screen uses.
+import { Palette } from "std-widgets.slint";
+
+export global Th {
+    out property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    out property <color> bg: dark ? #16181d : #f3f5f9;
+    out property <color> panel: dark ? #1f2228 : #fbfbfd;
+    out property <color> card: dark ? #ffffff12 : #ffffffc8;
+    out property <color> card-stroke: dark ? #ffffff1c : #00000014;
+    out property <color> inner: dark ? #ffffff0c : #f7f8fa99;
+    out property <color> inner-stroke: dark ? #ffffff16 : #00000012;
+    out property <color> line: dark ? #ffffff1a : #00000014;
+    out property <color> text: dark ? #e9ecf2 : #161a23;
+    out property <color> muted: dark ? #9aa2b4 : #5e6678;
+    out property <color> faint: dark ? #6b7285 : #8d94a3;
+    out property <color> on: dark ? #2fd67b : #16a35a;
+    out property <color> warn: dark ? #ffc84d : #b8740a;
+    out property <color> bad: dark ? #ff5d6c : #d13438;
+    out property <color> toast: dark ? #2b2f38 : #ffffff;
+    out property <color> accent: dark ? #4cc2ff : #005fb8;
+    out property <color> accent-ink: dark ? #000000 : #ffffff;
+    out property <color> warn-ink: dark ? #1b1600 : #ffffff;
+    out property <color> button: dark ? #ffffff14 : #ffffffd0;
+    out property <color> button-hover: dark ? #ffffff20 : #f1f3f7;
+    out property <color> button-stroke: dark ? #ffffff1e : #0000001c;
+    out property <color> scrim: dark ? #00000080 : #0000004d;
+
+    // 0 muted, 1 good, 2 warning, 3 bad, 4 quietly good
+    pure public function tone(t: int) -> color {
+        t == 1 ? on : t == 2 ? warn : t == 3 ? bad : t == 4 ? on.mix(muted, 0.55) : muted
+    }
+}
+
+export component T inherits Text {
+    color: Th.text;
+    font-size: 13px;
+    vertical-alignment: center;
+}
+
+// Text that wraps onto more lines instead of being cut off.
+export component Wrap inherits Text {
+    color: Th.muted;
+    font-size: 12.5px;
+    wrap: word-wrap;
+    horizontal-stretch: 1;
+}
+
+export component SectionTitle inherits Text {
+    color: Th.muted;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+}
+
+export component Divider inherits Rectangle {
+    height: 1px;
+    background: Th.line;
+}
+
+export component Card inherits Rectangle {
+    background: Th.card;
+    border-color: Th.card-stroke;
+    border-width: 1px;
+    border-radius: 16px;
+}
+
+export component Btn inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary;
+    in property <bool> small;
+    in property <bool> enabled: true;
+    in property <color> fill: primary ? Th.accent : Th.button;
+    in property <color> ink: primary ? Th.accent-ink : Th.text;
+    in property <color> stroke: primary ? self.fill : Th.button-stroke;
+    callback clicked();
+
+    height: small ? 26px : 32px;
+    min-width: label.preferred-width + (small ? 22px : 28px);
+    max-width: self.min-width;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    border-radius: 5px;
+    border-width: 1px;
+    border-color: fs.has-focus ? Th.accent : root.stroke;
+    background: !root.enabled ? root.fill : touch.pressed ? root.fill.mix(Th.text, 0.82) : touch.has-hover ? root.fill.mix(Th.text, 0.9) : root.fill;
+    opacity: root.enabled ? 1 : 0.45;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => { root.clicked(); }
+
+    label := Text {
+        text: root.text;
+        color: root.ink;
+        font-size: root.small ? 12.5px : 13px;
+        font-weight: root.primary ? 600 : 400;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    fs := FocusScope {
+        enabled: root.enabled;
+        key-pressed(e) => {
+            if (e.text == " " || e.text == "\n") {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component Link inherits Rectangle {
+    in property <string> text;
+    in property <length> size: 13px;
+    callback clicked();
+    height: label.preferred-height + 4px;
+    width: label.preferred-width;
+    horizontal-stretch: 0;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => { root.clicked(); }
+    label := Text {
+        text: root.text;
+        font-size: root.size;
+        color: touch.has-hover ? Th.accent.mix(Th.text, 0.75) : Th.accent;
+        vertical-alignment: center;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// An on/off switch. It only shows what it is told: the app decides what a click changes.
+export component Toggle inherits Rectangle {
+    in property <bool> checked;
+    in property <string> label;
+    callback toggled(bool);
+    width: 40px;
+    height: 20px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: fs.has-focus ? Th.text : root.checked ? Th.accent : Th.faint;
+    background: root.checked ? Th.accent : transparent;
+    accessible-role: switch;
+    accessible-label: root.label;
+    accessible-checked: root.checked;
+    accessible-action-default => { root.toggled(!root.checked); }
+    animate background { duration: 120ms; }
+    Rectangle {
+        width: touch.has-hover ? 14px : 12px;
+        height: self.width;
+        border-radius: self.width / 2;
+        x: (root.checked ? root.width - 4px - 12px : 4px) - (self.width - 12px) / 2;
+        y: (root.height - self.height) / 2;
+        background: root.checked ? Th.accent-ink : Th.muted;
+        animate x { duration: 120ms; easing: ease-out; }
+    }
+    fs := FocusScope {
+        key-pressed(e) => {
+            if (e.text == " " || e.text == "\n") {
+                root.toggled(!root.checked);
+                return accept;
+            }
+            return reject;
+        }
+    }
+    touch := TouchArea {
+        clicked => { root.toggled(!root.checked); }
+    }
+}
+
+export component Badge inherits Rectangle {
+    in property <string> text;
+    in property <color> tint;
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    background: root.tint;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    Text {
+        text: root.text;
+        color: white;
+        font-size: 11px;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// The small cross used to remove something or close a panel.
+export component CrossBtn inherits Rectangle {
+    in property <string> label;
+    in property <bool> quiet;
+    callback clicked();
+    width: 32px;
+    height: 32px;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    border-radius: 5px;
+    border-width: root.quiet && !touch.has-hover ? 0 : 1px;
+    border-color: Th.button-stroke;
+    background: touch.has-hover ? Th.button-hover : root.quiet ? transparent : Th.button;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.clicked(); }
+    Path {
+        width: 10px;
+        height: 10px;
+        commands: "M 0 0 L 10 10 M 10 0 L 0 10";
+        stroke: Th.muted;
+        stroke-width: 1.4px;
+    }
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+// A horizontal bar filled from the left.
+export component Meter inherits Rectangle {
+    in property <float> value;
+    in property <color> tint: Th.accent;
+    height: 4px;
+    border-radius: self.height / 2;
+    background: Th.line;
+    Rectangle {
+        x: 0;
+        width: parent.width * clamp(root.value, 0, 1);
+        border-radius: parent.border-radius;
+        background: root.tint;
+    }
+}
+
+// "127.0.0.1" in a little box, for things the user has to type somewhere else.
+export component Code inherits Rectangle {
+    in property <string> text;
+    width: label.preferred-width + 12px;
+    height: 20px;
+    horizontal-stretch: 0;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: Th.line;
+    background: Th.inner;
+    label := Text {
+        text: root.text;
+        color: Th.text;
+        font-size: 12px;
+        font-family: "Consolas";
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}

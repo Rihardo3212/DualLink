@@ -1,18 +1,8 @@
-__pycache__/
-*.pyc
-build/
+# build output
+target/
 dist/
-*.spec
-.venv/
-venv/
-.pytest_cache/
-duallink/_build_info.py
-# native window (Visual Studio / dotnet build output)
-native/**/bin/
-native/**/obj/
-.vs/
-*.user
 shots/
+ci/
 
 # files the Claude app saves into this folder
 Claude outputs/
