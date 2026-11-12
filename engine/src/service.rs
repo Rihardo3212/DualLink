@@ -25,6 +25,8 @@ pub struct Options {
     pub info_path: PathBuf,
     /// The window program; None when it can't be found.
     pub window_exe: Option<PathBuf>,
+    /// Show the tray icon (tests run without one).
+    pub tray: bool,
 }
 
 /// DualLinkWindow.exe next to DualLink.exe (DUALLINK_WINDOW can point at another copy).
@@ -258,15 +260,15 @@ impl Engine {
             self.open_window(); // the window starts while the rest gets ready
         }
         let (open, toggle, quit, is_on) = (self.clone(), self.clone(), self.clone(), self.clone());
-        let tray = Tray::start(Callbacks {
+        let tray = self.opts.tray.then(|| Tray::start(Callbacks {
             open: Box::new(move || {
                 open.open_window();
             }),
             toggle: Box::new(move || toggle.toggle()),
             quit: Box::new(move || quit.quit()),
             is_on: Box::new(move || is_on.ctl.running()),
-        });
-        if let Some(tray) = tray {
+        }));
+        if let Some(tray) = tray.flatten() {
             let _ = self.tray.set(tray);
         }
         self.changed();
@@ -351,7 +353,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let deps = Deps { scan: Box::new(Vec::new), ..Deps::default() };
         let ctl = Controller::new(dir.join("config.json"), deps);
-        let opts = Options { minimized: true, updated: false, info_path: dir.join("engine.json"), window_exe: None };
+        let opts = Options { minimized: true, updated: false, info_path: dir.join("engine.json"), window_exe: None, tray: false };
         let engine = Engine::new(ctl, opts);
         engine.start().unwrap();
         let info: Value = serde_json::from_str(&std::fs::read_to_string(dir.join("engine.json")).unwrap()).unwrap();

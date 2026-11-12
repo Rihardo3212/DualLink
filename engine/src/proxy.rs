@@ -562,10 +562,9 @@ impl Proxy {
         let port = relay.local_addr()?.port();
         let mut ok = vec![5, 0, 0, 1, 127, 0, 0, 1];
         ok.extend_from_slice(&port.to_be_bytes());
-        tcp.write_all(&ok).await?;
-
         self.udp_assocs.fetch_add(1, Relaxed);
         let _open = Counted(&self.udp_assocs);
+        tcp.write_all(&ok).await?;
         let mut client: Option<SocketAddr> = None; // where the app sends from
         let mut out: HashMap<(u64, Ipv4Addr), Arc<UdpSocket>> = HashMap::new();
         let mut dns: HashMap<String, Ipv4Addr> = HashMap::new();

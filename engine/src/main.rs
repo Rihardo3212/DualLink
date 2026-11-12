@@ -39,7 +39,7 @@ fn main() {
         return;
     }
     let ctl = controller::Controller::new(cfg_path, controller::Deps::default());
-    let opts = service::Options { minimized: has("--minimized"), updated, info_path: engine_file(), window_exe: service::find_window() };
+    let opts = service::Options { minimized: has("--minimized"), updated, info_path: engine_file(), window_exe: service::find_window(), tray: true };
     let engine = service::Engine::new(ctl, opts);
     if engine.start().is_err() {
         std::process::exit(1);
