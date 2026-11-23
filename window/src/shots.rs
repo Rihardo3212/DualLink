@@ -85,8 +85,11 @@ pub fn run(app: &Rc<App>) {
 
     add(2500, "01-main", Box::new(|a| a.ui.set_settings_open(true)));
     add(800, "02-settings", Box::new(|a| a.ui.invoke_scroll_settings_to_end()));
-    add(600, "03-settings-end", Box::new(|a| {
-        a.ui.set_settings_open(false);
+    add(600, "03-settings-end", Box::new(|a| a.ui.set_settings_open(false)));
+    // Settings is closed: making the window bigger must not slide it back into view
+    add(600, "", Box::new(|a| a.ui.window().set_size(slint::LogicalSize::new(1100.0, 760.0))));
+    add(60, "03b-resized-settings-closed", Box::new(|a| {
+        a.ui.window().set_size(slint::LogicalSize::new(920.0, 720.0));
         a.open_guide("qbt");
     }));
     add(800, "04-qbittorrent-setup", Box::new(|a| a.ui.set_qbt_more(true)));

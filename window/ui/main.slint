@@ -551,12 +551,15 @@ export component MainWindow inherits Window {
         TouchArea { clicked => { root.settings-open = false; } }
     }
     settings-panel := Rectangle {
-        x: root.settings-open ? root.width - self.width : root.width;
+        // How far open the panel is (0 = closed, 1 = open). Only this is animated, not x itself: x follows the
+        // window's right edge, so resizing the window would otherwise animate a closed panel into view.
+        property <float> shown: root.settings-open ? 1 : 0;
+        animate shown { duration: 160ms; easing: ease-out; }
+        x: root.width - self.width * self.shown;
         width: min(420px, root.width);
         height: root.height;
-        visible: self.x < root.width;
+        visible: self.shown > 0;
         background: Th.panel;
-        animate x { duration: 160ms; easing: ease-out; }
         TouchArea { }
         VerticalLayout {
             HorizontalLayout {
